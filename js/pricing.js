@@ -27,8 +27,9 @@
     delete it.sfPerDay;
     it.subject = String(it.subject || '').trim();
     it.unit = (it.unit || 'sf').toLowerCase();
-    it.materialRate = num(it.materialRate, 0);
-    it.unitsPerDay = num(it.unitsPerDay, 0);
+    // Blank = not known yet (typed in on each quote). 0 is a real value (free / no labor).
+    it.materialRate = num(it.materialRate, null);
+    it.unitsPerDay = num(it.unitsPerDay, null);
     if (it.roundTo !== undefined && it.roundTo !== null && it.roundTo !== '') it.roundTo = num(it.roundTo, null);
     else delete it.roundTo;
     return it;

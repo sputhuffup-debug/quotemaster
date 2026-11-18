@@ -29,7 +29,10 @@
   <script src="../js/pricing.js"></script>
   <script src="../js/quote.js"></script>
   <script src="../js/storage.js"></script>
+  <script src="../js/xlsx.js"></script>
+  <script src="../js/pricelist.js"></script>
   <script src="fixtures/mels-drive-in.js"></script>
+  <script src="fixtures/price-list.js"></script>
   <script>
   (function () {
     'use strict';
@@ -54,6 +57,14 @@
     function ok(cond, name, detail) { report(!!cond, name, detail || 'assertion failed'); }
     function test(name, fn) {
       try { fn(); } catch (e) { report(false, name, 'threw ' + (e && e.stack || e)); }
+    }
+    // Async tests run after the sync ones, each in its own group.
+    var asyncTests = [];
+    function asyncTest(groupName, name, fn) { asyncTests.push({ group: groupName, name: name, fn: fn }); }
+    function b64ToBytes(b64) {
+      var bin = atob(b64), out = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
     }
 
     // Most pricing tests check the Excel formulas, so they use catalog rates (2.85 $/sf, 320 sf/day).
@@ -431,10 +442,123 @@
       eq(s.quote.nextNumber, 1001, 'quote numbering default');
     });
 
+    /* ---------------- Price list (sync parts) ---------------- */
+    group('Price list — parsing');
+    test('header names', function () {
+      eq(PriceList.normHeader('Material Cost ($/unit)'), 'materialcost', 'parenthetical dropped');
+      var c = PriceList.mapHeader(['Supplier', 'SF/Day', 'Material Cost ($/unit)', 'Unit', 'Description', 'Code', 'Item']);
+      eq(c.subject, 6, 'Item');
+      eq(c.materialRate, 2, 'Material Cost');
+      eq(c.unitsPerDay, 1, 'SF/Day');
+      eq(c.code, 5, 'Code');
+      eq(c.description, 4, 'Description');
+    });
+    test('units', function () {
+      eq(PriceList.normUnit('SF'), 'sf', 'SF');
+      eq(PriceList.normUnit('Sq. Ft.'), 'sf', 'Sq. Ft.');
+      eq(PriceList.normUnit('LF'), 'lf', 'LF');
+      eq(PriceList.normUnit('Each'), 'ea', 'Each');
+      eq(PriceList.normUnit(''), null, 'blank');
+      eq(PriceList.normUnit('SHT'), undefined, 'unknown');
+    });
+    test('plan against catalog', function () {
+      var cat = freshSettings().catalog;
+      var parsed = PriceList.parseRows([
+        ['Item', 'Unit', 'Material Cost', 'SF/Day'],
+        ["frp-8'", 'SF', '$3.10', ''],
+        ['Base', 'LF', 1.5, 300]
+      ]);
+      var pl = PriceList.plan(cat, parsed, 'x.csv');
+      eq(pl.updated.length, 1, 'existing item matched case-insensitively');
+      eq(pl.updated[0].changes.length, 1, 'only cost changed (blank sf/day leaves 320)');
+      eq(pl.updated[0].changes[0].to, 3.1, 'new cost');
+      eq(pl.added.length, 1, 'new item');
+      var s = freshSettings();
+      PriceList.apply(s, pl);
+      eq(s.catalog[0].materialRate, 3.1, 'applied');
+      eq(s.catalog[0].unitsPerDay, 320, 'kept');
+      eq(s.catalog[1].unit, 'lf', 'new LF item');
+      eq(s.priceList.fileName, 'x.csv', 'source recorded');
+      var again = PriceList.plan(s.catalog, parsed, 'x.csv');
+      eq(again.updated.length + again.added.length, 0, 're-import is a no-op');
+    });
+    test('match by code when the name differs', function () {
+      var cat = freshSettings().catalog;
+      var pl = PriceList.plan(cat, PriceList.parseRows([['Item', 'Code', 'Cost'], ['White FRP', 'FRP-C-S100-WHT', 2.99]]), 'x');
+      eq(pl.updated.length, 1, 'matched by code');
+      eq(pl.updated[0].subject, "FRP-8'", 'catalog name kept (Bluebeam mapping still works)');
+    });
+    test('blank costs in catalog mode must be typed in', function () {
+      var s = freshSettings();
+      s.catalog.push(Pricing.normalizeCatalogItem({ subject: 'X', unit: 'sf', materialRate: 4 }));
+      var q = Quote.newQuote(s);
+      var rows = Parse.parseCsvText("Subject,Page Index,Install Height,Waste Sq FT.\nX,1,8',100\n").rows;
+      var pr = Pricing.price(q, rows);
+      eq(pr.lines[0].materialRate, 4, 'cost from catalog');
+      eq(pr.lines[0].unitsPerDay, null, 'blank install rate stays blank');
+      eq(pr.totals.linesMissingRates, 1, 'flagged');
+    });
+
+    asyncTest('Price list — Excel files', 'reads an Excel-written price list (openpyxl fixture)', function () {
+      return Xlsx.read(b64ToBytes(window.FIXTURES['price-list.xlsx'])).then(function (wb) {
+        eq(wb.sheets.length, 2, 'two sheets');
+        eq(wb.sheets[1].name, 'Prices', 'sheet name');
+        var parsed = PriceList.parseSheets(wb.sheets);
+        eq(parsed.sheetName, 'Prices', 'skips the sheet without a price list');
+        eq(parsed.headerRow, 3, 'header found below the title rows');
+        eq(parsed.items.length, 5, 'five items (blank row and item-less row skipped)');
+        var frp = parsed.items[0];
+        eq(frp.subject, "FRP-8'", 'item with apostrophe');
+        eq(frp.materialRate, 2.95, 'numeric cost');
+        eq(frp.unitsPerDay, undefined, 'blank SF/Day not provided');
+        eq(parsed.items[1].materialRate, 1.1, '"$1.10" text cost');
+        eq(parsed.items[1].unit, 'lf', 'LF');
+        eq(parsed.items[2].unit, 'ea', '"Each" -> EA');
+        eq(parsed.items[2].unitsPerDay, 0, '0 install rate kept');
+        eq(parsed.items[3].unit, 'ea', 'SHT -> EA');
+        ok(parsed.warnings.some(function (w) { return /SHT/.test(w); }), 'unknown unit warned');
+        ok(parsed.warnings.some(function (w) { return /"call"/.test(w); }), 'non-numeric cost warned');
+        ok(parsed.warnings.some(function (w) { return /no Item or Code/.test(w); }), 'item-less row warned');
+        var pl = PriceList.plan(freshSettings().catalog, parsed, 'price-list.xlsx');
+        eq(pl.updated.length, 1, 'FRP-8\' updated');
+        eq(pl.updated[0].changes[0].to, 2.95, '2.85 -> 2.95');
+        eq(pl.added.length, 4, '4 new items');
+      });
+    });
+    asyncTest('Price list — Excel files', 'template round-trip', function () {
+      var s = freshSettings();
+      s.catalog.push(Pricing.normalizeCatalogItem({ subject: 'Trim <PVC> & "cap"', code: 'T-1', description: 'Ünïcödé trim', unit: 'lf', materialRate: 1.25, unitsPerDay: null }));
+      var blob = PriceList.templateBlob(s.catalog);
+      return blob.arrayBuffer().then(function (buf) { return Xlsx.read(buf); }).then(function (wb) {
+        eq(wb.sheets[0].name, 'Price List', 'sheet name');
+        eq(wb.sheets[0].rows[0][0], 'Item', 'header');
+        eq(wb.sheets[0].rows[2][0], 'Trim <PVC> & "cap"', 'special characters survive');
+        eq(wb.sheets[0].rows[2][2], 'Ünïcödé trim', 'unicode survives');
+        var pl = PriceList.plan(s.catalog, PriceList.parseSheets(wb.sheets), 't.xlsx');
+        eq(pl.updated.length + pl.added.length, 0, 'importing the template changes nothing');
+      });
+    });
+    asyncTest('Price list — Excel files', 'rejects non-xlsx data', function () {
+      return Xlsx.read(new TextEncoder().encode('Item,Cost\nA,1')).then(function () { ok(false, 'should have failed'); },
+        function (e) { ok(/not an \.xlsx/.test(e.message), 'clear error for non-xlsx'); });
+    });
+
+    function finish() {
     var summary = document.getElementById('summary');
     summary.textContent = fail ? (fail + ' failed, ' + pass + ' passed') : ('All ' + pass + ' tests passed');
     summary.className = fail ? 'fail' : 'pass';
     window.TEST_RESULTS = { pass: pass, fail: fail };
+    }
+
+    var chain = Promise.resolve();
+    var lastGroup = null;
+    asyncTests.forEach(function (t) {
+      chain = chain.then(function () {
+        if (t.group !== lastGroup) { group(t.group); lastGroup = t.group; }
+        return Promise.resolve().then(t.fn).catch(function (e) { report(false, t.name, 'threw ' + (e && e.stack || e)); });
+      });
+    });
+    chain.then(finish);
   })();
   </script>
 </body>

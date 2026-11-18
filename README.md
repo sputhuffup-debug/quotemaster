@@ -43,6 +43,8 @@ revu-quote-builder/
 │   ├── pricing.js          # takeoff → priced line items
 │   ├── quote.js            # quote model, numbering, rendering
 │   ├── storage.js          # localStorage + JSON import/export (window.RqbStorage)
+│   ├── xlsx.js             # minimal .xlsx reader/writer (no library; uses the browser's DecompressionStream)
+│   ├── pricelist.js        # Excel/CSV material price list -> catalog
 │   └── app.js              # UI wiring
 ├── data/
 │   └── defaults.js         # window.DEFAULTS = { catalog, rates, company, terms }
@@ -52,13 +54,14 @@ revu-quote-builder/
 ├── test/
 │   ├── tests.html          # open in browser; runs plain-JS assertions
 │   └── fixtures/
+│       ├── price-list.js     # an Excel-written price list (.xlsx, base64) for the reader tests
 │       ├── mels-drive-in.csv
 │       └── mels-drive-in.js  # same CSV as a JS string; tests.html can't fetch() files on file://
 └── README.md
 ```
 
-Load order in `index.html`: `lib/papaparse` → `data/defaults` → `units` → `parse` → `pricing` → `quote` → `storage` → `app`.
-Each file adds one namespace to `window`: `Units`, `Parse`, `Pricing`, `Quote`, `RqbStorage` and `App`.
+Load order in `index.html`: `lib/papaparse` → `data/defaults` → `units` → `parse` → `pricing` → `quote` → `storage` → `xlsx` → `pricelist` → `app`.
+Each file adds one namespace to `window`: `Units`, `Parse`, `Pricing`, `Quote`, `RqbStorage`, `Xlsx`, `PriceList` and `App`.
 Storage uses `RqbStorage` because `window.Storage` is a built-in browser class.
 
 ---
@@ -183,6 +186,22 @@ window.DEFAULTS = {
 
 ---
 
+### 4.4 Material price list (Excel)
+
+Material costs are kept in an Excel workbook, expected to hold around 150 items, and imported into the catalog from **Settings → Material price list**. Dropping an `.xlsx` file on the window does the same thing.
+
+- **Download as Excel** writes `Material Price List.xlsx` in the expected layout, filled with the current catalog. It has a "How to use" sheet. This is the easiest way to start the spreadsheet.
+- **Import price list** reads `.xlsx` or `.csv`:
+  - Columns are matched by header name, in any order. Title rows above the header and extra columns are ignored, and the first sheet with a recognisable header row is used.
+  - Columns: **Item** (required, or **Code**), Code, Description, Unit (SF/LF/EA), **Material Cost** ($/unit), **Install Rate** (units/day), Scope, Round To. Common alternative names such as "Price", "Unit Cost", "SF/Day" and "SKU" are also recognised.
+  - Rows match catalog items by Item name (case-insensitive), then by Code. A changed name never renames a catalog item, so Bluebeam mappings keep working.
+  - **Blank cells never erase existing values.** Catalog items missing from the sheet are kept.
+- A review screen lists new items, changed fields (old → new) and warnings (unknown unit, non-numeric cost, rows without an item). Nothing is applied until you confirm.
+- To have new quotes use these prices, set *Material $ & install rate* to **Pre-fill from catalog**. The card offers a button for this after an import.
+  - In that mode, an item with a blank cost or install rate in the price list still has to be typed in on the quote. This lets the sheet hold material costs while sf/day stays a per-job entry.
+- Open quotes keep the rates they were created with. **Pricing → Reload rates from Settings** applies a new price list to the open quote. The internal take-off shows which price list file was used, and when it was imported.
+- `.xls` (Excel 97–2003) files are not read; re-save them as `.xlsx`. The reader needs Chrome or Edge 103 or later, for `DecompressionStream('deflate-raw')`.
+
 ## 5. Quote document
 
 Header and fields mirror the current sheet:
@@ -243,7 +262,7 @@ All six milestones are implemented. `test/tests.html` covers milestones 1 and 2,
 - [ ] **`SQ. FT` vs length × height:** the Bluebeam values don't exactly equal Measurement × 8 (181.69 × 8 = 1,453.5, but the CSV says 1,469). What formula does the Revu custom column use? Should the app trust it or recompute it?
 - [ ] **`Mat. Height`** (16 and 8 in the sample): is this panel sheet height, and does it affect pricing?
 - [x] **Day rate:** $1,584/day is the all-in labor cost per crew-day: $148/hr × 8 hrs plus $400 for per diem and vehicle use. The UI labels the $400 "Per diem + vehicle".
-- [x] **Material $ and sf/day:** these are entered by hand on each quote for now. Later they should come from a material-cost database (format and location to be decided).
+- [x] **Material $ and sf/day:** entered by hand on each quote for now. Material costs will come from an Excel price list (~150 items); the import is built (§4.4). Next step: build the real price list and switch to "Pre-fill from catalog".
 - [ ] **Labor production:** is 320 sf/day still the usual figure? Is the day rate the same on every job? (It can be changed per quote on the Pricing tab.)
 - [ ] **GC proposal:** show the material/labor split, or a lump sum only? Is tax included or excluded?
 - [ ] Other products besides FRP (other subjects, other units such as LF trim or EA corners)?

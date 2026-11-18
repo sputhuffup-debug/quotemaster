@@ -22,7 +22,8 @@
       labor: clone(settings.labor),
       quantity: clone(settings.quantity),
       subjectMap: clone(settings.subjectMap || {}),
-      rateEntry: settings.rateEntry === 'catalog' ? 'catalog' : 'manual'
+      rateEntry: settings.rateEntry === 'catalog' ? 'catalog' : 'manual',
+      priceList: settings.priceList ? clone(settings.priceList) : null
     };
   }
 
@@ -237,6 +238,9 @@
       U.formatMoney(lab.dailyAdder) + ' per diem &amp; vehicle = <strong>' + U.formatMoney(priced.dayRate) + '</strong>' +
       ' &nbsp;|&nbsp; Labor days: ' + U.formatNumber(priced.totals.laborDays, 3) +
       ' (rounding: ' + esc(lab.dayRounding || 'none') + ')' +
+      (quote.rates.rateEntry === 'catalog' && quote.rates.priceList
+        ? ' &nbsp;|&nbsp; Material prices: ' + esc(quote.rates.priceList.fileName) + ' (imported ' + esc(U.formatDateShort(new Date(quote.rates.priceList.importedAt))) + ')'
+        : (quote.rates.rateEntry !== 'catalog' ? ' &nbsp;|&nbsp; Material $ and install rates entered by hand' : '')) +
       ' &nbsp;|&nbsp; Quantity source: ' + esc({ wasteSqFt: 'Waste Sq FT.', sqFt: 'SQ. FT + ' + quote.rates.quantity.wastePct + '% waste', calc: 'Length × Height + ' + quote.rates.quantity.wastePct + '% waste' }[quote.rates.quantity.source] || quote.rates.quantity.source);
 
     return '' +

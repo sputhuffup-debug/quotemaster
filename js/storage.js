@@ -77,6 +77,15 @@
     });
   }
 
+  function readArrayBuffer(file) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () { resolve(fr.result); };
+      fr.onerror = function () { reject(fr.error || new Error('Could not read ' + file.name)); };
+      fr.readAsArrayBuffer(file);
+    });
+  }
+
   function readDataUrl(file) {
     return new Promise(function (resolve, reject) {
       var fr = new FileReader();
@@ -123,7 +132,10 @@
   }
 
   function downloadText(text, name, type) {
-    var blob = new Blob([text], { type: type || 'text/plain' });
+    downloadBlob(new Blob([text], { type: type || 'text/plain' }), name);
+  }
+
+  function downloadBlob(blob, name) {
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
@@ -147,6 +159,8 @@
     clearDraft: clearDraft,
     readText: readText,
     readDataUrl: readDataUrl,
+    readArrayBuffer: readArrayBuffer,
+    downloadBlob: downloadBlob,
     readJson: readJson,
     saveJsonFile: saveJsonFile,
     downloadText: downloadText,

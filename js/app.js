@@ -358,8 +358,9 @@
     var anyNonSf = lines.some(function (l) { return l.unit !== 'sf'; });
     function rateInput(l, ov, f, id) {
       var has = ov[f] !== undefined && ov[f] !== '';
-      if (!manualRates) {
-        var auto = String(P.findCatalogItem(q.rates.catalog, l.catalogSubject)[f]);
+      var catVal = (P.findCatalogItem(q.rates.catalog, l.catalogSubject) || {})[f];
+      if (!manualRates && catVal !== null && catVal !== undefined) {
+        var auto = String(catVal);
         return numInput(id, has ? ov[f] : '', ' data-line="' + esc(l.key) + '" data-ov="' + f + '" placeholder="' + esc(auto) + '"' +
           ' class="num w-xs' + (has ? ' overridden' : '') + '" title="Blank = catalog value ' + esc(auto) + '"');
       }
@@ -502,16 +503,85 @@
 
   /* ---------- Settings panel ---------- */
 
+  function fmtVal(field, v) {
+    if (v === null || v === undefined || v === '') return '—';
+    if (field === 'materialRate') return U.formatMoney(v);
+    if (field === 'unit') return String(v).toUpperCase();
+    return String(v);
+  }
+
+  function renderPriceListCard() {
+    var s = state.settings;
+    var pl = s.priceList;
+    var pend = state.pendingPriceList;
+    var status = pl
+      ? 'Last imported: <strong>' + esc(pl.fileName) + '</strong>' + (pl.sheetName && pl.sheetName !== pl.fileName ? ' (sheet “' + esc(pl.sheetName) + '”)' : '') +
+        ' on ' + esc(new Date(pl.importedAt).toLocaleString()) + ' · ' + pl.itemCount + ' item' + (pl.itemCount === 1 ? '' : 's')
+      : 'No price list imported yet. Click <strong>Download as Excel</strong> to get a spreadsheet in the right layout (it starts with your current catalog), fill in your materials and costs, then import it.';
+
+    var modeHint = '';
+    if (pl && s.rateEntry !== 'catalog') {
+      modeHint = '<ul class="messages"><li class="info">New quotes are set to <strong>type in material $ and sf/day on each line</strong>, so the price list is not used yet. ' +
+        '<button type="button" class="small" data-act="use-catalog-rates">Use price list on new quotes</button></li></ul>';
+    }
+
+    var preview = '';
+    if (pend) {
+      var rows = [];
+      pend.added.forEach(function (it) {
+        rows.push('<tr><td><strong>' + esc(it.subject) + '</strong></td><td><span class="pill">new</span></td><td>' + esc(it.description || '') + '</td>' +
+          '<td>' + fmtVal('unit', it.unit || 'sf') + '</td><td class="num">' + fmtVal('materialRate', it.materialRate) + '</td><td class="num">' + fmtVal('unitsPerDay', it.unitsPerDay) + '</td></tr>');
+      });
+      pend.updated.forEach(function (u) {
+        u.changes.forEach(function (ch, j) {
+          rows.push('<tr><td>' + (j ? '' : '<strong>' + esc(u.subject) + '</strong>') + '</td><td>' + esc(ch.label) + '</td>' +
+            '<td colspan="4">' + esc(fmtVal(ch.field, ch.from)) + ' &rarr; <strong>' + esc(fmtVal(ch.field, ch.to)) + '</strong></td></tr>');
+        });
+      });
+      var nothing = !pend.added.length && !pend.updated.length;
+      preview = '' +
+        '<div class="card" style="background:#fafbfc;margin-top:12px">' +
+          '<div class="card-head"><h3>Review: ' + esc(pend.fileName) + (pend.sheetName && pend.sheetName !== pend.fileName ? ' · sheet “' + esc(pend.sheetName) + '”' : '') + '</h3>' +
+            '<div class="row"><button type="button" data-act="pricelist-cancel">Cancel</button>' +
+            '<button type="button" class="primary" data-act="pricelist-apply"' + (nothing ? ' disabled' : '') + '>Apply to catalog</button></div></div>' +
+          '<p>' + pend.itemCount + ' item' + (pend.itemCount === 1 ? '' : 's') + ' in the file: <strong>' + pend.added.length + ' new</strong>, <strong>' +
+            pend.updated.length + ' changed</strong>, ' + pend.unchanged + ' unchanged.' +
+            (pend.notInList.length ? ' ' + pend.notInList.length + ' catalog item' + (pend.notInList.length === 1 ? ' is' : 's are') + ' not in the file and will be kept (' + esc(pend.notInList.slice(0, 8).join(', ')) + (pend.notInList.length > 8 ? ', …' : '') + ').' : '') +
+          '</p>' +
+          messages(pend.warnings.map(function (w) { return { level: 'warn', message: w }; })) +
+          (rows.length ? '<div class="table-wrap" style="max-height:420px;overflow:auto"><table class="data"><thead><tr><th>Item</th><th>Change</th><th>Description</th><th>Unit</th><th class="num">Material $</th><th class="num">Install rate</th></tr></thead><tbody>' +
+            rows.join('') + '</tbody></table></div>' : '<p class="muted">Nothing to change — the catalog already matches this file.</p>') +
+        '</div>';
+    }
+
+    return '' +
+      '<div class="card">' +
+        '<div class="card-head"><h3>Material price list (Excel)</h3>' +
+          '<div class="row">' +
+            '<button type="button" data-act="pricelist-template">Download as Excel…</button>' +
+            '<button type="button" class="primary" data-act="pick-pricelist">Import price list…</button>' +
+            '<input type="file" id="file-pricelist" accept=".xlsx,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv" hidden>' +
+          '</div></div>' +
+        '<p class="hint" style="margin:0">' + status + '</p>' +
+        modeHint +
+        preview +
+      '</div>';
+  }
+
   function renderSettings() {
     var s = state.settings;
     var c = s.company;
+    var filt = String(state.catFilter || '').trim().toLowerCase();
+    var shown = 0;
     var cat = s.catalog.map(function (it, i) {
+      if (filt && [it.subject, it.code, it.description].join(' ').toLowerCase().indexOf(filt) === -1) return '';
+      shown++;
       return '<tr>' +
         '<td>' + textInput('c-subj-' + i, it.subject, ' data-cat="' + i + '" data-f="subject" style="min-width:110px"') + '</td>' +
         '<td>' + textInput('c-code-' + i, it.code || '', ' data-cat="' + i + '" data-f="code" style="min-width:110px"') + '</td>' +
         '<td>' + textInput('c-desc-' + i, it.description || '', ' data-cat="' + i + '" data-f="description" style="min-width:220px"') + '</td>' +
         '<td><textarea rows="2" id="c-scope-' + i + '" data-cat="' + i + '" data-f="scope" style="min-width:240px">' + esc(it.scope || '') + '</textarea></td>' +
-        '<td><select id="c-unit-' + i + '" data-cat="' + i + '" data-f="unit">' + options([['sf', 'SF'], ['lf', 'LF'], ['ea', 'EA']], it.unit) + '</select></td>' +
+        '<td><select id="c-unit-' + i + '" data-cat="' + i + '" data-f="unit" style="min-width:68px">' + options([['sf', 'SF'], ['lf', 'LF'], ['ea', 'EA']], it.unit) + '</select></td>' +
         '<td>' + numInput('c-rate-' + i, it.materialRate, ' data-cat="' + i + '" data-f="materialRate" class="num w-xs"') + '</td>' +
         '<td>' + numInput('c-pd-' + i, it.unitsPerDay, ' data-cat="' + i + '" data-f="unitsPerDay" class="num w-xs"') + '</td>' +
         '<td>' + numInput('c-rt-' + i, it.roundTo === undefined ? '' : it.roundTo, ' data-cat="' + i + '" data-f="roundTo" class="num w-xs" placeholder="' + (it.unit === 'sf' ? 'default' : '1') + '"') + '</td>' +
@@ -555,13 +625,17 @@
             '<input type="file" id="file-logo" accept="image/*" hidden></div>' +
         '</div>' +
       '</div>' +
+      renderPriceListCard() +
       '<div class="card">' +
-        '<div class="card-head"><h3>Catalog</h3><button type="button" data-act="add-cat">Add item</button></div>' +
+        '<div class="card-head"><h3>Catalog <span class="muted" style="font-weight:400">(' + s.catalog.length + ' item' + (s.catalog.length === 1 ? '' : 's') + ')</span></h3>' +
+          '<div class="row"><input type="text" id="cat-filter" placeholder="Search items…" style="width:200px"' + attr('value', state.catFilter || '') + '>' +
+          '<button type="button" data-act="add-cat">Add item</button></div></div>' +
         '<p class="hint">The <strong>Subject</strong> must match the Bluebeam markup Subject (without the “(2)” group count), or be mapped to it on the Import tab. ' +
           'The $ / unit and Units / day columns are only used when <em>Material $ &amp; install rate</em> (below) is set to <em>Pre-fill from catalog</em>. ' +
           'SF items: material $ per sf, sf installed per day. LF items use Measurement (ft). EA items count markups. Units/day 0 = material only.</p>' +
         '<div class="table-wrap"><table class="data"><thead><tr><th>Subject</th><th>Code</th><th>Description</th><th>Scope paragraph</th><th>Unit</th><th>$ / unit</th><th>Units / day</th><th>Round up to</th><th></th></tr></thead>' +
-        '<tbody>' + (cat || '<tr><td colspan="9" class="muted">No catalog items.</td></tr>') + '</tbody></table></div>' +
+        '<tbody>' + (cat || '<tr><td colspan="9" class="muted">' + (filt ? 'No items match “' + esc(state.catFilter) + '”.' : 'No catalog items.') + '</td></tr>') + '</tbody></table></div>' +
+        (filt && shown ? '<p class="hint">Showing ' + shown + ' of ' + s.catalog.length + '.</p>' : '') +
       '</div>' +
       '<div class="card">' +
         '<h3>Labor &amp; quantities</h3>' +
@@ -778,6 +852,7 @@
     if (t.dataset.map !== undefined) { setMapping(t.dataset.map, t.value); return; }
 
     // ----- settings -----
+    if (t.id === 'cat-filter') { state.catFilter = t.value; render(); return; }
     if (t.dataset.s !== undefined) {
       var sv;
       if (t.type === 'checkbox') sv = t.checked;
@@ -900,6 +975,31 @@
         delete s.subjectMap[b.dataset.k];
         settingsChanged('full');
         break;
+      case 'pick-pricelist': $('#file-pricelist').click(); break;
+      case 'pricelist-template':
+        S.downloadBlob(global.PriceList.templateBlob(s.catalog), 'Material Price List.xlsx');
+        toast('Downloaded Material Price List.xlsx');
+        break;
+      case 'pricelist-cancel':
+        state.pendingPriceList = null;
+        render();
+        break;
+      case 'pricelist-apply': {
+        var pend = state.pendingPriceList;
+        if (!pend) return;
+        global.PriceList.apply(s, pend);
+        state.pendingPriceList = null;
+        S.saveSettings(s);
+        syncPristineQuote();
+        render();
+        toast('Price list applied: ' + pend.added.length + ' new, ' + pend.updated.length + ' changed. Open quotes keep their rates until you use Pricing → Reload rates.');
+        break;
+      }
+      case 'use-catalog-rates':
+        s.rateEntry = 'catalog';
+        settingsChanged('full');
+        toast('New quotes will pre-fill material $ and install rate from the catalog. Blank values still need typing in.');
+        break;
       case 'pick-logo': $('#file-logo').click(); break;
       case 'del-logo':
         s.company.logoDataUrl = '';
@@ -941,6 +1041,13 @@
     if (t.id === 'file-csv') importCsvFile(file);
     else if (t.id === 'file-open-quote') openQuoteFile(file);
     else if (t.id === 'file-settings') importSettingsFile(file);
+    else if (t.id === 'file-pricelist') {
+      global.PriceList.planFromFile(file, state.settings.catalog).then(function (pl) {
+        state.pendingPriceList = pl;
+        state.tab = 'settings';
+        render();
+      }).catch(function (err) { toast(err.message, true); });
+    }
     else if (t.id === 'file-logo') {
       if (file.size > 600 * 1024) { toast('Please use a logo smaller than 600 KB (it is stored in the browser).', true); t.value = ''; return; }
       S.readDataUrl(file).then(function (url) {
@@ -964,13 +1071,19 @@
       doc.body.classList.remove('dragging');
       var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
       if (!f) return;
-      if (/\.csv$/i.test(f.name) || f.type === 'text/csv') importCsvFile(f);
+      if (/\.xlsx$/i.test(f.name)) {
+        global.PriceList.planFromFile(f, state.settings.catalog).then(function (pl) {
+          state.pendingPriceList = pl;
+          state.tab = 'settings';
+          render();
+        }).catch(function (err) { toast(err.message, true); });
+      } else if (/\.csv$/i.test(f.name) || f.type === 'text/csv') importCsvFile(f);
       else if (/\.json$/i.test(f.name)) {
         S.readJson(f).then(function (json) {
           if (json && json.kind === Q.FILE_KIND) openQuoteFile(f);
           else importSettingsFile(f);
         }).catch(function (err) { toast(err.message, true); });
-      } else toast('Drop a Bluebeam .csv, a saved quote .json, or a settings .json.', true);
+      } else toast('Drop a Bluebeam .csv, a price list .xlsx, a saved quote .json, or a settings .json.', true);
     });
   }
 

@@ -27,6 +27,8 @@ window.DEFAULTS = {
   quantity: { source: "wasteSqFt", roundTo: 100, wastePct: 7 },
   // "manual": type material $ and sf/day on each quote (lines start blank).  "catalog": pre-fill from the catalog above.
   rateEntry: "manual",
+  // Last imported material price list (Settings -> Material price list): { fileName, sheetName, importedAt, itemCount }
+  priceList: null,
   company: { name: "", address: "", phone: "", email: "", license: "", logoDataUrl: "" },
   terms: { validDays: 30, notes: ["No Spec"], taxPct: 0 },
   proposal: { showSplit: false, lumpSum: false, showUnitQty: true },
