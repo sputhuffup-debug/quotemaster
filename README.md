@@ -27,6 +27,35 @@ To run it, double-click `index.html`. To run the tests, double-click `test/tests
 
 You can also drop a `.csv` (import) or `.json` (saved quote or settings export) anywhere on the window.
 
+### Screenshots
+
+These use the Mel's Drive In sample takeoff (`test/fixtures/mels-drive-in.csv`) and placeholder company details.
+
+**1. Import:** the Bluebeam CSV is parsed, checked against its subtotal row, and each subject is mapped to a catalog item.
+
+![Import tab](docs/screenshots/1-import.png)
+
+**2. Pricing:** material $/sf and install sf/day are typed in per line. Labor comes from sf ÷ sf/day × $1,584/day.
+
+![Pricing tab](docs/screenshots/2-pricing.png)
+
+**3. Quote:** GC, project, construction type, notes and line descriptions.
+
+![Quote tab](docs/screenshots/3-quote.png)
+
+**4. Print layouts:** the GC proposal (left) and the internal take-off (right), which shows the material/labor split, rates and take-off detail.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/4-proposal.png" alt="GC proposal"></td>
+    <td width="50%"><img src="docs/screenshots/5-internal-takeoff.png" alt="Internal take-off"></td>
+  </tr>
+</table>
+
+**5. Material price list:** importing an Excel price list shows every change for review before it is applied.
+
+![Price list import review](docs/screenshots/6-price-list-import.png)
+
 ---
 
 ## 2. Repo layout
@@ -51,6 +80,8 @@ revu-quote-builder/
 ├── lib/
 │   ├── papaparse.min.js    # vendored CSV parser v5.4.1 (MIT)
 │   └── papaparse.LICENSE
+├── docs/
+│   └── screenshots/        # README images
 ├── test/
 │   ├── tests.html          # open in browser; runs plain-JS assertions
 │   └── fixtures/
