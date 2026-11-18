@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Revu Quote Builder — tests</title>
+  <style>
+    body { font: 14px/1.4 "Segoe UI", system-ui, sans-serif; margin: 20px; background: #fff; color: #111; }
+    h1 { font-size: 18px; }
+    #summary { font-weight: 700; padding: 8px 12px; border-radius: 4px; display: inline-block; }
+    #summary.pass { background: #e3f5ea; color: #145c33; }
+    #summary.fail { background: #fde8e8; color: #8a1c1c; }
+    ul { list-style: none; padding: 0; }
+    li { padding: 2px 0; font-family: Consolas, monospace; font-size: 13px; }
+    li.pass::before { content: "✔ "; color: #1d7a46; }
+    li.fail { color: #a52020; }
+    li.fail::before { content: "✘ "; }
+    h2 { font-size: 15px; margin: 18px 0 4px; }
+  </style>
+</head>
+<body>
+  <h1>Revu Quote Builder — tests</h1>
+  <div id="summary">Running…</div>
+  <div id="results"></div>
+
+  <script src="../lib/papaparse.min.js"></script>
+  <script src="../data/defaults.js"></script>
+  <script src="../js/units.js"></script>
+  <script src="../js/parse.js"></script>
+  <script src="../js/pricing.js"></script>
+  <script src="../js/quote.js"></script>
+  <script src="../js/storage.js"></script>
+  <script src="fixtures/mels-drive-in.js"></script>
+  <script>
+  (function () {
+    'use strict';
+    var results = document.getElementById('results');
+    var pass = 0, fail = 0, list = null;
+
+    function group(name) {
+      var h = document.createElement('h2'); h.textContent = name; results.appendChild(h);
+      list = document.createElement('ul'); results.appendChild(list);
+    }
+    function report(ok, name, detail) {
+      var li = document.createElement('li');
+      li.className = ok ? 'pass' : 'fail';
+      li.textContent = name + (ok ? '' : '  —  ' + detail);
+      list.appendChild(li);
+      if (ok) pass++; else fail++;
+    }
+    function eq(actual, expected, name) {
+      var ok = actual === expected || (typeof actual === 'number' && typeof expected === 'number' && Math.abs(actual - expected) < 1e-9);
+      report(ok, name, 'expected ' + JSON.stringify(expected) + ', got ' + JSON.stringify(actual));
+    }
+    function ok(cond, name, detail) { report(!!cond, name, detail || 'assertion failed'); }
+    function test(name, fn) {
+      try { fn(); } catch (e) { report(false, name, 'threw ' + (e && e.stack || e)); }
+    }
+
+    function freshSettings() { return RqbStorage.normalizeSettings(null); }
+    function fixture() { return Parse.parseCsvText(window.FIXTURES['mels-drive-in.csv']); }
+
+    /* ---------------- Units ---------------- */
+    group('Units');
+    test('parseNumber', function () {
+      eq(Units.parseNumber('2,041'), 2041, '"2,041" -> 2041');
+      eq(Units.parseNumber(' 612 '), 612, '" 612 " -> 612');
+      eq(Units.parseNumber('252.2279'), 252.2279, 'decimal');
+      eq(Units.parseNumber(''), null, 'blank -> null (never 0)');
+      eq(Units.parseNumber(null), null, 'null -> null');
+      eq(Units.parseNumber('abc'), null, 'text -> null');
+      eq(Units.parseNumber('$1,584.00'), 1584, 'money string');
+      eq(Units.parseNumber('-3.5'), -3.5, 'negative');
+    });
+    test('parseFeet', function () {
+      eq(Units.parseFeet("8'"), 8, "8'");
+      eq(Units.parseFeet("8'-6\""), 8.5, "8'-6\"");
+      eq(Units.parseFeet("8' 6\""), 8.5, "8' 6\"");
+      eq(Units.parseFeet("8'6\""), 8.5, "8'6\"");
+      eq(Units.parseFeet("6\""), 0.5, '6"');
+      eq(Units.parseFeet('8.5'), 8.5, '8.5');
+      eq(Units.parseFeet('16'), 16, '16');
+      eq(Units.parseFeet("10' 0\""), 10, "10' 0\"");
+      eq(Units.parseFeet("8 ft 6 in"), 8.5, '8 ft 6 in');
+      eq(Units.parseFeet("8′-6″"), 8.5, 'prime symbols');
+      ok(Math.abs(Units.parseFeet("8' 6 1/2\"") - (8 + 6.5 / 12)) < 1e-9, "8' 6 1/2\"");
+      eq(Units.parseFeet(''), null, 'blank -> null');
+      eq(Units.parseFeet('tall'), null, 'garbage -> null');
+    });
+    test('rounding and formatting', function () {
+      eq(Units.roundUp(2184, 100), 2200, 'roundUp(2184, 100)');
+      eq(Units.roundUp(2200, 100), 2200, 'roundUp exact multiple stays');
+      eq(Units.roundUp(2184, 0), 2184, 'roundTo 0 = no rounding');
+      eq(Units.roundDays(6.875, 'none'), 6.875, 'days none');
+      eq(Units.roundDays(6.875, 'half'), 7, 'days half');
+      eq(Units.roundDays(6.2, 'half'), 6.5, 'days half 6.2 -> 6.5');
+      eq(Units.roundDays(6.2, 'whole'), 7, 'days whole');
+      eq(Units.roundMoney(2200 * 2.85), 6270, 'roundMoney(2200*2.85)');
+      eq(Units.roundMoney(1.005), 1.01, 'roundMoney(1.005)');
+      eq(Units.formatMoney(17160), '$17,160.00', 'formatMoney');
+      eq(Units.formatFeet(8), "8'", 'formatFeet 8');
+      eq(Units.formatFeet(8.5), "8'-6\"", 'formatFeet 8.5');
+      eq(Units.formatDateShort('2026-11-05'), '11-05-26', 'mm-dd-yy');
+    });
+
+    /* ---------------- Parse ---------------- */
+    group('Parse (fixture: mels-drive-in.csv)');
+    test('fixture parses to 2 detail rows', function () {
+      var p = fixture();
+      eq(p.rows.length, 2, 'detail rows');
+      eq(p.subtotals.length, 1, 'subtotal rows dropped from detail');
+      eq(p.subtotals[0].subject, "FRP-8' (2)", 'subtotal subject');
+      eq(p.subtotals[0].count, 2, 'subtotal count');
+      var total = p.rows.reduce(function (s, r) { return s + r.wasteSqFt; }, 0);
+      eq(total, 2184, 'sum Waste Sq Ft = 2,184');
+      eq(p.subtotals[0].wasteSqFt, 2184, 'matches subtotal row');
+      eq(p.warnings.filter(function (w) { return w.code === 'subtotal'; }).length, 0, 'no subtotal mismatch warning');
+    });
+    test('fixture field values', function () {
+      var r = fixture().rows;
+      eq(r[0].subject, "FRP-8'", 'subject');
+      eq(r[0].baseSubject, "FRP-8'", 'base subject');
+      eq(r[0].page, '16', 'page index');
+      eq(r[0].measurement, 181.6871, 'measurement');
+      eq(r[0].measurementUnit, "ft' in\"", 'measurement unit with embedded quotes');
+      eq(r[0].sqFt, 1469, 'SQ. FT with comma');
+      eq(r[0].matHeight, 16, 'mat height');
+      eq(r[0].installHeight, 8, "install height 8'");
+      eq(r[0].wasteSqFt, 1572, 'waste sq ft');
+      eq(r[1].sqFt, 572, 'SQ. FT without comma');
+      eq(r[1].wasteSqFt, 612, 'waste sq ft row 2');
+      eq(r[0].room, '', 'blank room stays blank string');
+    });
+    test('header matching by name, not position', function () {
+      var csv = 'Waste Sq FT.,Install Height,Subject,Page Index,Measurement\n"1,000",9\',Wall A,3,100\n';
+      var p = Parse.parseCsvText(csv);
+      eq(p.rows.length, 1, 'one row');
+      eq(p.rows[0].subject, 'Wall A', 'subject from 3rd column');
+      eq(p.rows[0].wasteSqFt, 1000, 'waste from 1st column');
+      eq(p.rows[0].installHeight, 9, 'height from 2nd column');
+    });
+    test('base subject', function () {
+      eq(Parse.baseSubject("FRP-8' (2)"), "FRP-8'", "FRP-8' (2)");
+      eq(Parse.baseSubject("FRP-8' (12) "), "FRP-8'", 'two-digit count');
+      eq(Parse.baseSubject("Base (Rubber)"), 'Base (Rubber)', 'non-numeric parens kept');
+    });
+    test('subtotal mismatch warns', function () {
+      var csv = 'Subject,Page Index,Measurement,Waste Sq FT.\nX (2),,10,"2,500"\nX,1,5,"1,000"\nX,1,5,"1,000"\n';
+      var p = Parse.parseCsvText(csv);
+      eq(p.rows.length, 2, 'rows');
+      ok(p.warnings.some(function (w) { return w.code === 'subtotal' && /2,500/.test(w.message); }), 'mismatch warning mentions subtotal');
+    });
+    test('subtotal count mismatch warns', function () {
+      var p = Parse.parseCsvText('Subject,Page Index,Waste Sq FT.\nX (3),,200\nX,1,100\nX,1,100\n');
+      ok(p.warnings.some(function (w) { return w.code === 'subtotal' && /3 markups/.test(w.message); }), 'count warning');
+    });
+    test('blank quantity stays null', function () {
+      var p = Parse.parseCsvText('Subject,Page Index,Waste Sq FT.,SQ. FT\nX,1,,\n');
+      eq(p.rows[0].wasteSqFt, null, 'waste null');
+      eq(p.rows[0].sqFt, null, 'sqft null');
+    });
+    test('not a Bluebeam file', function () {
+      var p = Parse.parseCsvText('a,b,c\n1,2,3\n');
+      ok(p.warnings.some(function (w) { return w.level === 'error'; }), 'error reported');
+      eq(p.rows.length, 0, 'no rows');
+    });
+    test('title line above header is skipped', function () {
+      var p = Parse.parseCsvText('Markups Summary\nSubject,Page Index,Waste Sq FT.\nX,1,10\n');
+      eq(p.rows.length, 1, 'row found below title');
+    });
+
+    /* ---------------- Pricing ---------------- */
+    group('Pricing — golden test (Excel Template sheet)');
+    test('golden numbers', function () {
+      var s = freshSettings();
+      var q = Quote.newQuote(s);
+      var pr = Pricing.price(q, fixture().rows);
+      eq(pr.lines.length, 1, 'one line item');
+      var l = pr.lines[0];
+      eq(l.rawQty, 2184, 'Waste Sq Ft sum 2,184');
+      eq(l.qty, 2200, 'Total SQ 2,200');
+      eq(l.height, 8, 'Height 8');
+      eq(l.linealFt, 275, 'Lineal Ft 275');
+      eq(l.material, 6270, 'Material $6,270.00');
+      eq(pr.dayRate, 1584, 'Day rate $1,584.00');
+      eq(l.laborDays, 6.875, 'Labor days 6.875 (not rounded)');
+      eq(l.labor, 10890, 'Labor $10,890.00');
+      eq(l.total, 17160, 'Line total $17,160.00');
+      eq(pr.totals.total, 17160, 'Grand total $17,160.00');
+      eq(Units.formatMoney(pr.totals.total), '$17,160.00', 'formatted total');
+      eq(l.description, 'FRP-CLASS C MARLITE S100 S2S WHITE SMOOTH PVC TRIM', 'description from catalog');
+      eq(l.scopeLabel, "@ 8' AFF", 'default scope label');
+    });
+
+    group('Pricing — options and overrides');
+    test('day rounding', function () {
+      var s = freshSettings();
+      var q = Quote.newQuote(s);
+      q.rates.labor.dayRounding = 'whole';
+      var l = Pricing.price(q, fixture().rows).lines[0];
+      eq(l.laborDays, 7, 'whole -> 7 days');
+      eq(l.labor, 11088, 'labor 7 × 1584');
+      q.rates.labor.dayRounding = 'half';
+      eq(Pricing.price(q, fixture().rows).lines[0].laborDays, 7, 'half -> 7 days');
+    });
+    test('per-quote overrides', function () {
+      var s = freshSettings();
+      var q = Quote.newQuote(s);
+      var key = Pricing.price(q, fixture().rows).lines[0].key;
+      q.lineOverrides[key] = { qty: '2,300', materialRate: '3' };
+      var l = Pricing.price(q, fixture().rows).lines[0];
+      eq(l.qty, 2300, 'qty override');
+      eq(l.material, 6900, 'material at $3');
+      eq(l.linealFt, 288, 'lineal ft ceil(2300/8)');
+      q.rates.labor.hourlyRate = '150';
+      eq(Pricing.price(q, fixture().rows).dayRate, 1600, 'string hourly rate parsed');
+      q.lineOverrides[key] = { excluded: true };
+      eq(Pricing.price(q, fixture().rows).totals.total, 0, 'excluded line not totalled');
+    });
+    test('excluded rows', function () {
+      var s = freshSettings();
+      var q = Quote.newQuote(s);
+      var rows = fixture().rows;
+      q.excludedRows[rows[1].id] = true;
+      var l = Pricing.price(q, rows).lines[0];
+      eq(l.rawQty, 1572, 'only row 1');
+      eq(l.qty, 1600, 'rounded to 1,600');
+    });
+    test('unmapped and ignored subjects', function () {
+      var s = freshSettings();
+      var q = Quote.newQuote(s);
+      var rows = Parse.parseCsvText('Subject,Page Index,Install Height,Waste Sq FT.\nMystery,1,8\',100\n').rows;
+      var pr = Pricing.price(q, rows);
+      eq(pr.lines.length, 0, 'not priced');
+      eq(pr.unmapped.length, 1, 'reported as unmapped');
+      ok(pr.warnings.some(function (w) { return w.code === 'unmapped'; }), 'unmapped warning');
+      q.rates.subjectMap.Mystery = "FRP-8'";
+      pr = Pricing.price(q, rows);
+      eq(pr.lines.length, 1, 'mapped -> priced');
+      eq(pr.lines[0].qty, 100, 'qty 100');
+      q.rates.subjectMap.Mystery = Pricing.IGNORE;
+      pr = Pricing.price(q, rows);
+      eq(pr.lines.length + pr.unmapped.length, 0, 'ignored -> neither priced nor unmapped');
+    });
+    test('different heights -> separate lines', function () {
+      var s = freshSettings();
+      var q = Quote.newQuote(s);
+      var rows = Parse.parseCsvText("Subject,Page Index,Install Height,Waste Sq FT.\nFRP-8',1,8',100\nFRP-8',1,4',50\n").rows;
+      var pr = Pricing.price(q, rows);
+      eq(pr.lines.length, 2, 'two lines');
+      eq(pr.lines[0].height, 4, 'sorted by height');
+    });
+    test('group by room', function () {
+      var s = freshSettings();
+      var q = Quote.newQuote(s);
+      var rows = Parse.parseCsvText("Subject,Room,Page Index,Install Height,Waste Sq FT.\nFRP-8',Kitchen,1,8',150\nFRP-8',Dish,1,8',120\nFRP-8',Kitchen,2,8',10\n").rows;
+      var pr = Pricing.price(q, rows);
+      eq(pr.lines.length, 1, 'one line by default');
+      eq(pr.lines[0].scopeLabel, "(2) ROOMS  @ 8' AFF", 'room count in scope label');
+      q.groupByRoom = true;
+      pr = Pricing.price(q, rows);
+      eq(pr.lines.length, 2, 'one line per room');
+    });
+    test('quantity fallbacks', function () {
+      var s = freshSettings();
+      var q = Quote.newQuote(s);
+      var rows = Parse.parseCsvText("Subject,Page Index,Measurement,Install Height,SQ. FT,Waste Sq FT.\nFRP-8',1,100,8',800,\n").rows;
+      var pr = Pricing.price(q, rows);
+      eq(pr.lines[0].rawQty, 856, 'SQ. FT × 1.07 when waste column blank');
+      ok(pr.warnings.some(function (w) { return w.code === 'fallback'; }), 'fallback noted');
+      q.rates.quantity.source = 'calc';
+      q.rates.quantity.wastePct = 0;
+      eq(Pricing.price(q, rows).lines[0].rawQty, 800, 'calc = length × height');
+      var blank = Parse.parseCsvText("Subject,Page Index,Waste Sq FT.\nFRP-8',1,\n").rows;
+      q.rates.quantity.source = 'wasteSqFt';
+      pr = Pricing.price(q, blank);
+      eq(pr.lines.length, 0, 'no quantity -> no line');
+      ok(pr.warnings.some(function (w) { return w.code === 'blankqty'; }), 'blank quantity warning');
+    });
+    test('LF and EA items', function () {
+      var s = freshSettings();
+      s.catalog.push(Pricing.normalizeCatalogItem({ subject: 'Trim', unit: 'lf', materialRate: 2, unitsPerDay: 200 }));
+      s.catalog.push(Pricing.normalizeCatalogItem({ subject: 'Corner', unit: 'ea', materialRate: 5, unitsPerDay: 0 }));
+      var q = Quote.newQuote(s);
+      var rows = Parse.parseCsvText('Subject,Page Index,Measurement,Measurement Unit\nTrim,1,10.2,ft\nTrim,1,5.1,ft\nCorner,1,1,Count\nCorner,1,1,Count\nCorner,2,1,Count\n').rows;
+      var pr = Pricing.price(q, rows);
+      var trim = pr.lines.filter(function (l) { return l.catalogSubject === 'Trim'; })[0];
+      var corner = pr.lines.filter(function (l) { return l.catalogSubject === 'Corner'; })[0];
+      eq(trim.qty, 16, 'LF rounded up to whole foot');
+      eq(trim.material, 32, 'LF material');
+      eq(trim.labor, Units.roundMoney(16 / 200 * 1584), 'LF labor');
+      eq(corner.qty, 3, 'EA counts markups');
+      eq(corner.labor, 0, 'units/day 0 -> no labor');
+      eq(corner.total, 15, 'EA total');
+    });
+    test('manual lines', function () {
+      var s = freshSettings();
+      var q = Quote.newQuote(s);
+      q.manualLines.push({ id: 'm1', catalogSubject: "FRP-8'", qty: 150, height: "8'" });
+      var pr = Pricing.price(q, []);
+      eq(pr.lines.length, 1, 'manual line priced');
+      eq(pr.lines[0].qty, 150, 'manual qty not rounded');
+      eq(pr.lines[0].material, Units.roundMoney(150 * 2.85), 'material');
+    });
+    test('sales tax on material', function () {
+      var s = freshSettings();
+      var q = Quote.newQuote(s);
+      q.taxPct = '8.625';
+      var t = Pricing.price(q, fixture().rows).totals;
+      eq(t.tax, 540.79, 'tax = 6,270 × 8.625%');
+      eq(t.total, 17700.79, 'total with tax');
+    });
+    test('legacy catalog field names', function () {
+      var it = Pricing.normalizeCatalogItem({ subject: ' A ', materialRatePerSf: 2.85, sfPerDay: 320 });
+      eq(it.materialRate, 2.85, 'materialRatePerSf -> materialRate');
+      eq(it.unitsPerDay, 320, 'sfPerDay -> unitsPerDay');
+      eq(it.subject, 'A', 'subject trimmed');
+      eq(it.unit, 'sf', 'default unit sf');
+    });
+
+    /* ---------------- Quote ---------------- */
+    group('Quote model');
+    test('numbering increments on first save only', function () {
+      var s = freshSettings();
+      var q = Quote.newQuote(s);
+      eq(q.number, 'Q-1001', 'provisional number');
+      ok(Quote.commitNumber(q, s), 'first commit changes settings');
+      eq(q.number, 'Q-1001', 'number assigned');
+      eq(s.quote.nextNumber, 1002, 'next number bumped');
+      ok(!Quote.commitNumber(q, s), 'second save keeps number');
+      eq(s.quote.nextNumber, 1002, 'not bumped again');
+      var q2 = Quote.newQuote(s);
+      eq(q2.number, 'Q-1002', 'next quote gets 1002');
+    });
+    test('save file round-trip keeps original rates', function () {
+      var s = freshSettings();
+      var q = Quote.newQuote(s);
+      var p = fixture();
+      q.source = { fileName: 'x.csv', rows: p.rows, subtotals: p.subtotals, warnings: p.warnings };
+      var json = JSON.parse(JSON.stringify(Quote.toFile(q)));
+      s.catalog[0].materialRate = 9.99;      // later price change in settings
+      s.labor.hourlyRate = 500;
+      var q2 = Quote.fromFile(json, s);
+      eq(Pricing.price(q2, q2.source.rows).totals.total, 17160, 're-opened quote still $17,160.00');
+      var threw = false;
+      try { Quote.fromFile({ hello: 1 }, s); } catch (e) { threw = true; }
+      ok(threw, 'rejects non-quote JSON');
+    });
+    test('render internal and proposal', function () {
+      var s = freshSettings();
+      s.company.name = 'Acme <FRP>';
+      var q = Quote.newQuote(s);
+      q.gc.name = 'Generals';
+      q.project.name = "Mel's Drive In";
+      q.constructionType = 'new';
+      var pr = Pricing.price(q, fixture().rows);
+      var internal = Quote.render(q, pr, s, 'internal');
+      var proposal = Quote.render(q, pr, s, 'proposal');
+      ok(/OFFICIAL MATERIAL TAKE-OFF/.test(internal), 'internal title');
+      ok(/\$6,270\.00/.test(internal) && /\$10,890\.00/.test(internal), 'internal shows M/L split');
+      ok(/\$1,584\.00/.test(internal), 'internal shows day rate');
+      ok(/\$17,160\.00/.test(proposal), 'proposal shows total');
+      ok(/PROPOSAL/.test(proposal), 'proposal title');
+      ok(!/\$1,584\.00/.test(proposal), 'proposal hides day rate');
+      ok(!/\$6,270\.00/.test(proposal), 'proposal hides material split by default');
+      ok(/Acme &lt;FRP&gt;/.test(proposal), 'company name escaped');
+      ok(/Mel&#39;s Drive In/.test(proposal), 'project escaped');
+      ok(/&#9746; New Const\./.test(proposal), 'construction type checked');
+      ok(/No Spec/.test(proposal), 'default note');
+      q.proposal.lumpSum = true;
+      var lump = Quote.render(q, pr, s, 'proposal');
+      ok(/Lump sum total/.test(lump), 'lump sum label');
+    });
+    test('settings normalization', function () {
+      var s = RqbStorage.normalizeSettings({ labor: { hourlyRate: 150 }, catalog: [{ subject: 'X', materialRatePerSf: 1, sfPerDay: 100 }] });
+      eq(s.labor.hourlyRate, 150, 'override kept');
+      eq(s.labor.hoursPerDay, 8, 'missing filled from defaults');
+      eq(s.catalog.length, 1, 'catalog replaced, not merged');
+      eq(s.catalog[0].unitsPerDay, 100, 'legacy names upgraded');
+      eq(s.quote.nextNumber, 1001, 'quote numbering default');
+    });
+
+    var summary = document.getElementById('summary');
+    summary.textContent = fail ? (fail + ' failed, ' + pass + ' passed') : ('All ' + pass + ' tests passed');
+    summary.className = fail ? 'fail' : 'pass';
+    window.TEST_RESULTS = { pass: pass, fail: fail };
+  })();
+  </script>
+</body>
+</html>
