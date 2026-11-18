@@ -21,7 +21,8 @@
       catalog: clone(settings.catalog),
       labor: clone(settings.labor),
       quantity: clone(settings.quantity),
-      subjectMap: clone(settings.subjectMap || {})
+      subjectMap: clone(settings.subjectMap || {}),
+      rateEntry: settings.rateEntry === 'catalog' ? 'catalog' : 'manual'
     };
   }
 
@@ -59,6 +60,8 @@
     out.rates = out.rates || ratesFromSettings(settings);
     out.rates.catalog = (out.rates.catalog || []).map(global.Pricing.normalizeCatalogItem);
     out.rates.subjectMap = out.rates.subjectMap || {};
+    // Quotes saved before manual rate entry existed were priced from the catalog; keep their numbers.
+    if (out.rates.rateEntry !== 'manual' && out.rates.rateEntry !== 'catalog') out.rates.rateEntry = 'catalog';
     out.rates.labor = Object.assign({}, settings.labor, out.rates.labor || {});
     out.rates.quantity = Object.assign({}, settings.quantity, out.rates.quantity || {});
     if (Array.isArray(out.notes)) out.notes = out.notes.join('\n');
@@ -203,8 +206,11 @@
       } else {
         detail.push('Manual line');
       }
-      detail.push('Material ' + U.formatNumber(l.qty, 2) + ' &times; ' + U.formatMoney(l.materialRate) + '/' + l.unit);
-      if (l.unitsPerDay > 0) {
+      detail.push(l.materialRate === null ? '<strong>Material $/' + l.unit + ' not entered</strong>'
+        : 'Material ' + U.formatNumber(l.qty, 2) + ' &times; ' + U.formatMoney(l.materialRate) + '/' + l.unit);
+      if (l.unitsPerDay === null) {
+        detail.push('<strong>Install ' + l.unit + '/day not entered</strong>');
+      } else if (l.unitsPerDay > 0) {
         detail.push('Labor ' + U.formatNumber(l.qty, 2) + ' &divide; ' + U.formatNumber(l.unitsPerDay, 2) + ' ' + l.unit + '/day = ' +
           U.formatNumber(l.laborDaysRaw, 3) + ' days' + (l.laborDays !== l.laborDaysRaw ? ' &rarr; ' + U.formatNumber(l.laborDays, 1) : '') +
           ' &times; ' + U.formatMoney(l.dayRate) + '/day');
@@ -236,6 +242,8 @@
     return '' +
       '<article class="doc doc-internal">' +
         renderHeader(quote, settings, 'OFFICIAL MATERIAL TAKE-OFF') +
+        (priced.totals.linesMissingRates ? '<p class="doc-alert">INCOMPLETE: ' + priced.totals.linesMissingRates + ' line' +
+          (priced.totals.linesMissingRates === 1 ? ' is' : 's are') + ' missing material $ or install rate. Totals below are understated.</p>' : '') +
         '<table class="doc-lines">' +
           '<thead><tr><th>Scope of work</th><th>Material</th><th class="num">Lineal ft</th><th class="num">Height</th>' +
           '<th class="num">' + (allSf ? 'Total SQ' : 'Qty') + '</th><th class="num">M</th><th class="num">L</th><th class="num">Price</th></tr></thead>' +

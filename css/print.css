@@ -27,6 +27,7 @@
 .doc-code { font-size: 8pt; color: #666; }
 .doc-empty { text-align: center; color: #777; font-style: italic; }
 
+.doc-alert { border: 2px solid #b00; color: #b00; font-weight: 700; padding: 6px 8px; margin: 0 0 10px; }
 .doc-rates { font-size: 8.5pt; color: #333; margin: 4px 0 12px; }
 .doc-scope { margin: 12px 0; }
 .doc-scope p { margin: 0 0 6px; }

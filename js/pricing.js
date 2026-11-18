@@ -108,8 +108,12 @@
       catalog: (quote.rates.catalog || []).map(normalizeCatalogItem),
       labor: quote.rates.labor || {},
       quantity: quote.rates.quantity || {},
-      subjectMap: quote.rates.subjectMap || {}
+      subjectMap: quote.rates.subjectMap || {},
+      // "manual": material $ and units/day are typed in on each quote (blank until entered).
+      // "catalog": they default to the catalog item's rates.
+      rateEntry: quote.rates.rateEntry === 'catalog' ? 'catalog' : 'manual'
     };
+    var manualRates = rates.rateEntry === 'manual';
     var overrides = quote.lineOverrides || {};
     var excluded = quote.excludedRows || {};
     var dr = dayRate(rates.labor);
@@ -219,24 +223,37 @@
       line.linealFt = item.unit === 'sf'
         ? (line.height ? Math.ceil(line.qty / line.height - 1e-9) : null)
         : (item.unit === 'lf' ? line.qty : null);
-      line.materialRate = ov.materialRate !== undefined && ov.materialRate !== '' ? num(ov.materialRate, 0) : item.materialRate;
-      line.unitsPerDay = ov.unitsPerDay !== undefined && ov.unitsPerDay !== '' ? num(ov.unitsPerDay, 0) : item.unitsPerDay;
+      function rate(f) {
+        var v = ov[f] !== undefined && ov[f] !== '' ? U.parseNumber(ov[f]) : null;
+        if (v !== null) return v;
+        return manualRates ? null : item[f];
+      }
+      line.materialRate = rate('materialRate');     // null = not entered yet (manual mode)
+      line.unitsPerDay = rate('unitsPerDay');
+      line.missingRates = [];
+      if (line.materialRate === null) line.missingRates.push('material $/' + item.unit);
+      if (line.unitsPerDay === null) line.missingRates.push(item.unit + '/day');
       line.description = ov.description !== undefined ? ov.description : (item.description || item.subject);
       line.scope = ov.scope !== undefined ? ov.scope : (item.scope || '');
       line.scopeLabelAuto = defaultScopeLabel(line);
       line.scopeLabel = ov.scopeLabel !== undefined ? ov.scopeLabel : line.scopeLabelAuto;
       line.dayRate = dr;
-      line.laborDaysRaw = line.unitsPerDay > 0 ? line.qty / line.unitsPerDay : 0;
+      line.laborDaysRaw = line.unitsPerDay > 0 ? line.qty / line.unitsPerDay : 0;   // 0 sf/day = no labor
       line.laborDays = U.roundDays(line.laborDaysRaw, rates.labor.dayRounding);
-      line.material = U.roundMoney(line.qty * line.materialRate);
+      line.material = U.roundMoney(line.qty * (line.materialRate || 0));
       line.labor = U.roundMoney(line.laborDays * dr);
       line.total = U.roundMoney(line.material + line.labor);
       return line;
     });
 
-    var totals = { material: 0, labor: 0, laborDays: 0, subtotal: 0, tax: 0, total: 0, taxPct: num(quote.taxPct, 0) };
+    var totals = { material: 0, labor: 0, laborDays: 0, subtotal: 0, tax: 0, total: 0, taxPct: num(quote.taxPct, 0), linesMissingRates: 0 };
     lines.forEach(function (l) {
       if (l.excluded) return;
+      if (l.missingRates.length) {
+        totals.linesMissingRates++;
+        warnings.push({ level: 'warn', code: 'needsrate', lineKey: l.key,
+          message: (l.scopeLabel || l.catalogSubject) + ' (' + l.catalogSubject + '): enter ' + l.missingRates.join(' and ') + '.' });
+      }
       totals.material += l.material;
       totals.labor += l.labor;
       totals.laborDays += l.laborDays;

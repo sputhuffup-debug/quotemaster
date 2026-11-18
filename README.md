@@ -21,7 +21,7 @@ To run it, double-click `index.html`. To run the tests, double-click `test/tests
 
 1. **Settings** tab: enter your company name, address and logo. Check the catalog and labor rates. Click **Export settings** to keep a backup.
 2. **Import** tab: drop the Bluebeam Markups Summary CSV. Check the subtotal check and the subject mapping.
-3. **Pricing** tab: adjust any rate or quantity for this quote only. Overridden fields turn yellow.
+3. **Pricing** tab: type the **material $/sf** and **install sf/day** for each line. They start blank, and red fields still need a value. Any other rate or quantity can be adjusted for this quote only; changed fields turn yellow.
 4. **Quote** tab: fill in the GC, project, construction type and notes. Then use **Print proposal** or **Print internal**, and choose **Save as PDF**.
 5. **Save quote** (or Ctrl+S) writes a `.json` file. **Open quote…** re-opens it with its original rates.
 
@@ -131,6 +131,12 @@ Labor days are **not** rounded in the current sheet (6.875 days). Make rounding 
   - `calc` uses Measurement × Install Height × (1 + waste).
   - If the chosen column is blank on a row, the next option is used and a note is shown.
 - **Units:** `sf` items price square feet as described above. `lf` items use Measurement (ft), rounded up to whole feet. `ea` items count markups, or use Measurement when the unit is "Count".
+- **Manual rate entry (`rateEntry: "manual"`, the default):** material $ per unit and install units per day are typed in on each line of each quote. This stays until material costs can come from a database.
+  - Until both values are entered, the line is flagged and the total is understated.
+  - The Pricing tab shows red fields and an "incomplete" badge, the Quote tab shows a warning, printing asks for confirmation, and the internal take-off prints an INCOMPLETE banner.
+  - Entering `0` for units/day means material only, with no labor.
+  - Set `rateEntry` to `"catalog"` (Settings → Labor & quantities, or per quote on the Pricing tab) to pre-fill both values from the catalog instead.
+  - Quotes saved before this option existed open in catalog mode, so their totals don't change.
 - **Per-quote overrides:** each quote stores a snapshot of the catalog, labor and quantity settings. Any line can override its quantity, height, $/unit or units/day. Blank means automatic.
 - **Manual lines** can be added for items that aren't in the takeoff. They are priced at the quantity typed, with no rounding.
 - **Sales tax:** an optional % on material (`terms.taxPct`, default 0). The tax line is only shown when it is non-zero.
@@ -155,6 +161,7 @@ window.DEFAULTS = {
   subjectMap: {},            // remembered Bluebeam Subject -> catalog subject ("__ignore__" = leave off)
   labor: { hourlyRate: 148, hoursPerDay: 8, dailyAdder: 400, dayRounding: "none" },
   quantity: { source: "wasteSqFt", roundTo: 100, wastePct: 7 },
+  rateEntry: "manual",       // "manual" = type material $ and sf/day per quote | "catalog" = pre-fill from catalog
   company: { name: "", address: "", phone: "", email: "", license: "", logoDataUrl: "" },
   terms: { validDays: 30, notes: ["No Spec"], taxPct: 0 },
   proposal: { showSplit: false, lumpSum: false, showUnitQty: true },
@@ -236,7 +243,8 @@ All six milestones are implemented. `test/tests.html` covers milestones 1 and 2,
 - [ ] **`SQ. FT` vs length × height:** the Bluebeam values don't exactly equal Measurement × 8 (181.69 × 8 = 1,453.5, but the CSV says 1,469). What formula does the Revu custom column use? Should the app trust it or recompute it?
 - [ ] **`Mat. Height`** (16 and 8 in the sample): is this panel sheet height, and does it affect pricing?
 - [x] **Day rate:** $1,584/day is the all-in labor cost per crew-day: $148/hr × 8 hrs plus $400 for per diem and vehicle use. The UI labels the $400 "Per diem + vehicle".
-- [ ] **Labor production:** confirm 320 sf/day. Is the day rate the same on every job? (It can be changed per quote on the Pricing tab.)
+- [x] **Material $ and sf/day:** these are entered by hand on each quote for now. Later they should come from a material-cost database (format and location to be decided).
+- [ ] **Labor production:** is 320 sf/day still the usual figure? Is the day rate the same on every job? (It can be changed per quote on the Pricing tab.)
 - [ ] **GC proposal:** show the material/labor split, or a lump sum only? Is tax included or excluded?
 - [ ] Other products besides FRP (other subjects, other units such as LF trim or EA corners)?
 - [ ] Standard exclusions / terms text to include on every proposal.

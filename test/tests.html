@@ -56,7 +56,8 @@
       try { fn(); } catch (e) { report(false, name, 'threw ' + (e && e.stack || e)); }
     }
 
-    function freshSettings() { return RqbStorage.normalizeSettings(null); }
+    // Most pricing tests check the Excel formulas, so they use catalog rates (2.85 $/sf, 320 sf/day).
+    function freshSettings() { var s = RqbStorage.normalizeSettings(null); s.rateEntry = 'catalog'; return s; }
     function fixture() { return Parse.parseCsvText(window.FIXTURES['mels-drive-in.csv']); }
 
     /* ---------------- Units ---------------- */
@@ -189,6 +190,57 @@
       eq(Units.formatMoney(pr.totals.total), '$17,160.00', 'formatted total');
       eq(l.description, 'FRP-CLASS C MARLITE S100 S2S WHITE SMOOTH PVC TRIM', 'description from catalog');
       eq(l.scopeLabel, "@ 8' AFF", 'default scope label');
+    });
+
+    group('Pricing — manual rate entry (default)');
+    test('defaults to manual entry', function () {
+      eq(RqbStorage.normalizeSettings(null).rateEntry, 'manual', 'settings default');
+      eq(Quote.newQuote(RqbStorage.normalizeSettings(null)).rates.rateEntry, 'manual', 'new quote');
+    });
+    test('blank rates until typed in', function () {
+      var q = Quote.newQuote(RqbStorage.normalizeSettings(null));
+      var pr = Pricing.price(q, fixture().rows);
+      var l = pr.lines[0];
+      eq(l.materialRate, null, 'material rate blank');
+      eq(l.unitsPerDay, null, 'sf/day blank');
+      eq(l.qty, 2200, 'quantity still automatic');
+      eq(pr.totals.total, 0, 'total $0 while missing');
+      eq(pr.totals.linesMissingRates, 1, 'line flagged incomplete');
+      ok(pr.warnings.some(function (w) { return w.code === 'needsrate'; }), 'needs-rate warning');
+      ok(/INCOMPLETE/.test(Quote.render(q, pr, RqbStorage.normalizeSettings(null), 'internal')), 'internal printout flags it');
+    });
+    test('typed rates give the golden total', function () {
+      var q = Quote.newQuote(RqbStorage.normalizeSettings(null));
+      var key = Pricing.price(q, fixture().rows).lines[0].key;
+      q.lineOverrides[key] = { materialRate: '2.85' };
+      var pr = Pricing.price(q, fixture().rows);
+      eq(pr.totals.material, 6270, 'material entered');
+      eq(pr.totals.linesMissingRates, 1, 'still missing sf/day');
+      q.lineOverrides[key].unitsPerDay = '320';
+      pr = Pricing.price(q, fixture().rows);
+      eq(pr.totals.total, 17160, '$17,160.00');
+      eq(pr.totals.linesMissingRates, 0, 'complete');
+      q.lineOverrides[key].unitsPerDay = '400';
+      eq(Pricing.price(q, fixture().rows).lines[0].labor, 8712, 'different sf/day: 2200/400 × 1584');
+      q.lineOverrides[key].unitsPerDay = '0';
+      pr = Pricing.price(q, fixture().rows);
+      eq(pr.lines[0].labor, 0, '0 sf/day = material only');
+      eq(pr.totals.linesMissingRates, 0, '0 counts as entered');
+    });
+    test('excluded lines do not need rates', function () {
+      var q = Quote.newQuote(RqbStorage.normalizeSettings(null));
+      var key = Pricing.price(q, fixture().rows).lines[0].key;
+      q.lineOverrides[key] = { excluded: true };
+      eq(Pricing.price(q, fixture().rows).totals.linesMissingRates, 0, 'not flagged');
+    });
+    test('older saved quotes keep catalog pricing', function () {
+      var s = RqbStorage.normalizeSettings(null);
+      var legacy = Quote.newQuote(s);
+      delete legacy.rates.rateEntry;
+      legacy.source = { rows: fixture().rows };
+      var q = Quote.fromFile({ kind: Quote.FILE_KIND, quote: JSON.parse(JSON.stringify(legacy)) }, s);
+      eq(q.rates.rateEntry, 'catalog', 'treated as catalog');
+      eq(Pricing.price(q, q.source.rows).totals.total, 17160, 'same total as when saved');
     });
 
     group('Pricing — options and overrides');

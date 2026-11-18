@@ -42,8 +42,12 @@
     return '<input type="text" id="' + esc(id) + '"' + attr('value', value === null || value === undefined ? '' : value) + (extra || '') + '>';
   }
   function numInput(id, value, extra) {
-    return '<input type="text" inputmode="decimal" class="num" id="' + esc(id) + '"' +
-      attr('value', value === null || value === undefined ? '' : value) + (extra || '') + '>';
+    extra = extra || '';
+    // Merge a caller-supplied class="..." into ours (a second class attribute would be ignored).
+    var cls = 'num';
+    extra = extra.replace(/\s*class="([^"]*)"/, function (m, c) { cls = c.indexOf('num') === -1 ? 'num ' + c : c; return ''; });
+    return '<input type="text" inputmode="decimal" class="' + cls + '" id="' + esc(id) + '"' +
+      attr('value', value === null || value === undefined ? '' : value) + extra + '>';
   }
   function field(label, html, cls) {
     return '<label class="field' + (cls ? ' ' + cls : '') + '"><span>' + esc(label) + '</span>' + html + '</label>';
@@ -317,7 +321,7 @@
       '<div><span>Labor</span><strong>' + U.formatMoney(t.labor) + '</strong></div>' +
       '<div><span>Labor days</span><strong>' + U.formatNumber(t.laborDays, 3) + '</strong></div>' +
       (t.tax ? '<div><span>Tax</span><strong>' + U.formatMoney(t.tax) + '</strong></div>' : '') +
-      '<div class="grand"><span>Total</span><strong>' + U.formatMoney(t.total) + '</strong></div>' +
+      '<div class="grand"><span>Total' + (t.linesMissingRates ? ' <span class="pill warn">incomplete: ' + t.linesMissingRates + ' line' + (t.linesMissingRates === 1 ? ' needs' : 's need') + ' rates</span>' : '') + '</span><strong>' + U.formatMoney(t.total) + '</strong></div>' +
       '</div>';
   }
 
@@ -342,13 +346,28 @@
             options([['wasteSqFt', 'Waste Sq FT. column'], ['sqFt', 'SQ. FT column + waste %'], ['calc', 'Length × Install Ht + waste %']], qty.source) + '</select>') +
           field('Round SF up to', numInput('r-roundto', qty.roundTo, ' data-q="rates.quantity.roundTo"')) +
           field('Waste % (if not using Waste col.)', numInput('r-waste', qty.wastePct, ' data-q="rates.quantity.wastePct"')) +
+          field('Material $ & install rate', '<select id="r-rateentry" data-q="rates.rateEntry">' +
+            options([['manual', 'Type in on each line'], ['catalog', 'Pre-fill from catalog']], q.rates.rateEntry || 'manual') + '</select>') +
           field('Sales tax on material (%)', numInput('r-tax', q.taxPct, ' data-q="taxPct"')) +
           '<label class="field"><span>Grouping</span><span class="check" style="padding:6px 0"><input type="checkbox" id="r-room" data-q="groupByRoom"' + (q.groupByRoom ? ' checked' : '') + '> Separate line per room</span></label>' +
         '</div>' +
       '</div>';
 
     var lines = priced.lines;
+    var manualRates = q.rates.rateEntry !== 'catalog';
     var anyNonSf = lines.some(function (l) { return l.unit !== 'sf'; });
+    function rateInput(l, ov, f, id) {
+      var has = ov[f] !== undefined && ov[f] !== '';
+      if (!manualRates) {
+        var auto = String(P.findCatalogItem(q.rates.catalog, l.catalogSubject)[f]);
+        return numInput(id, has ? ov[f] : '', ' data-line="' + esc(l.key) + '" data-ov="' + f + '" placeholder="' + esc(auto) + '"' +
+          ' class="num w-xs' + (has ? ' overridden' : '') + '" title="Blank = catalog value ' + esc(auto) + '"');
+      }
+      var missing = !has && !l.excluded;
+      return numInput(id, has ? ov[f] : '', ' data-line="' + esc(l.key) + '" data-ov="' + f + '" placeholder="enter"' +
+        ' class="num w-xs' + (missing ? ' required' : '') + '"' +
+        ' title="' + (f === 'materialRate' ? 'Material cost per ' + l.unit : 'Installed ' + l.unit + ' per crew-day (0 = no labor)') + '"');
+    }
     var body = lines.map(function (l, i) {
       var ov = q.lineOverrides[l.key] || {};
       function ovInput(f, id, val, auto, cls) {
@@ -367,8 +386,8 @@
         '<td class="num">' + (l.manual ? '—' : U.formatNumber(l.rawQty, 2)) + (anyNonSf ? ' ' + esc(unitTxt) : '') + '</td>' +
         '<td>' + ovInput('qty', 'ln-q-' + i, null, U.formatNumber(l.autoQty, 2), 'w-sm') + '</td>' +
         '<td class="num">' + (l.linealFt !== null ? U.formatNumber(l.linealFt) : '') + '</td>' +
-        '<td>' + ovInput('materialRate', 'ln-mr-' + i, null, String(l.materialRate), 'w-xs') + '</td>' +
-        '<td>' + ovInput('unitsPerDay', 'ln-pd-' + i, null, String(l.unitsPerDay), 'w-xs') + '</td>' +
+        '<td>' + rateInput(l, ov, 'materialRate', 'ln-mr-' + i) + '</td>' +
+        '<td>' + rateInput(l, ov, 'unitsPerDay', 'ln-pd-' + i) + '</td>' +
         '<td class="num">' + U.formatNumber(l.laborDays, 3) + '</td>' +
         '<td class="num">' + U.formatMoney(l.material) + '</td>' +
         '<td class="num">' + U.formatMoney(l.labor) + '</td>' +
@@ -394,12 +413,14 @@
 
     return ratesCard +
       '<div class="card">' +
-        '<div class="card-head"><h3>Line items</h3><span class="hint">Grey values are automatic. Type in a field to override it for this quote only (it turns yellow); clear it to go back.</span></div>' +
+        '<div class="card-head"><h3>Line items</h3><span class="hint">' + (manualRates
+          ? 'Type the material cost and install production for each line (red = still needed). Other grey values are automatic; typing over them overrides them for this quote (yellow).'
+          : 'Grey values are automatic. Type in a field to override it for this quote only (it turns yellow); clear it to go back.') + '</span></div>' +
         messages(warn) +
         empty +
         (lines.length ? '<div class="table-wrap"><table class="data"><thead><tr>' +
           '<th></th><th>Scope label</th><th>Item</th><th>Height</th><th class="num">Takeoff qty</th><th>Priced qty</th><th class="num">Lineal ft</th>' +
-          '<th>$ / unit</th><th>Units / day</th><th class="num">Labor days</th><th class="num">Material</th><th class="num">Labor</th><th class="num">Total</th><th></th>' +
+          '<th>' + (anyNonSf ? 'Material $ / unit' : 'Material $ / sf') + '</th><th>' + (anyNonSf ? 'Install units / day' : 'Install sf / day') + '</th><th class="num">Labor days</th><th class="num">Material</th><th class="num">Labor</th><th class="num">Total</th><th></th>' +
           '</tr></thead><tbody>' + body + '</tbody>' +
           '<tfoot><tr><td></td><td colspan="8">Totals</td><td class="num">' + U.formatNumber(t.laborDays, 3) + '</td>' +
           '<td class="num">' + U.formatMoney(t.material) + '</td><td class="num">' + U.formatMoney(t.labor) + '</td>' +
@@ -470,6 +491,8 @@
           '<button type="button" data-act="print" data-mode="internal">Print internal</button>' +
           '<button type="button" class="primary" data-act="print" data-mode="proposal">Print proposal</button>' +
         '</div>' +
+        (state.priced.totals.linesMissingRates ? messages([{ level: 'error', message: state.priced.totals.linesMissingRates +
+          ' line(s) still need material $ and/or install sf/day. Enter them on the Pricing tab before sending this quote.' }]) : '') +
         '<div class="preview" id="preview">' + Q.render(q, state.priced, state.settings, state.previewMode) + '</div>' +
         '<p class="hint">Print opens the browser print dialog — choose <strong>Save as PDF</strong> as the destination.</p>' +
       '</div>';
@@ -535,6 +558,7 @@
       '<div class="card">' +
         '<div class="card-head"><h3>Catalog</h3><button type="button" data-act="add-cat">Add item</button></div>' +
         '<p class="hint">The <strong>Subject</strong> must match the Bluebeam markup Subject (without the “(2)” group count), or be mapped to it on the Import tab. ' +
+          'The $ / unit and Units / day columns are only used when <em>Material $ &amp; install rate</em> (below) is set to <em>Pre-fill from catalog</em>. ' +
           'SF items: material $ per sf, sf installed per day. LF items use Measurement (ft). EA items count markups. Units/day 0 = material only.</p>' +
         '<div class="table-wrap"><table class="data"><thead><tr><th>Subject</th><th>Code</th><th>Description</th><th>Scope paragraph</th><th>Unit</th><th>$ / unit</th><th>Units / day</th><th>Round up to</th><th></th></tr></thead>' +
         '<tbody>' + (cat || '<tr><td colspan="9" class="muted">No catalog items.</td></tr>') + '</tbody></table></div>' +
@@ -550,6 +574,8 @@
           field('SF quantity from', '<select id="s-source" data-s="quantity.source">' + options([['wasteSqFt', 'Waste Sq FT. column'], ['sqFt', 'SQ. FT column + waste %'], ['calc', 'Length × Install Ht + waste %']], s.quantity.source) + '</select>') +
           field('Round SF up to', numInput('s-roundto', s.quantity.roundTo, ' data-s="quantity.roundTo"')) +
           field('Waste %', numInput('s-waste', s.quantity.wastePct, ' data-s="quantity.wastePct"')) +
+          field('Material $ & install rate', '<select id="s-rateentry" data-s="rateEntry">' +
+            options([['manual', 'Type in on each quote'], ['catalog', 'Pre-fill from catalog']], s.rateEntry || 'manual') + '</select>') +
         '</div>' +
       '</div>' +
       '<div class="card">' +
@@ -675,6 +701,8 @@
   }
 
   function printDoc(mode) {
+    var missing = state.priced.totals.linesMissingRates;
+    if (missing && !global.confirm(missing + ' line' + (missing === 1 ? ' is' : 's are') + ' missing material $ or install sf/day, so the total is too low.\nPrint anyway?')) return;
     var root = $('#print-root');
     root.innerHTML = Q.render(state.quote, state.priced, state.settings, mode);
     var oldTitle = doc.title;
@@ -815,10 +843,18 @@
         changed();
         toast('Rates reloaded from Settings');
         break;
-      case 'reset-line':
-        delete q.lineOverrides[b.dataset.line];
+      case 'reset-line': {
+        var old = q.lineOverrides[b.dataset.line] || {};
+        var keep = {};
+        if (q.rates.rateEntry !== 'catalog') {   // typed-in rates are data, not overrides
+          if (old.materialRate !== undefined) keep.materialRate = old.materialRate;
+          if (old.unitsPerDay !== undefined) keep.unitsPerDay = old.unitsPerDay;
+        }
+        if (Object.keys(keep).length) q.lineOverrides[b.dataset.line] = keep;
+        else delete q.lineOverrides[b.dataset.line];
         changed();
         break;
+      }
       case 'reset-ov': {
         var ov = q.lineOverrides[b.dataset.line];
         if (ov) { delete ov[b.dataset.ov]; if (!Object.keys(ov).length) delete q.lineOverrides[b.dataset.line]; }

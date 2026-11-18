@@ -25,6 +25,8 @@ window.DEFAULTS = {
   labor: { hourlyRate: 148, hoursPerDay: 8, dailyAdder: 400, dayRounding: "none" },
   // source: "wasteSqFt" (Bluebeam Waste Sq FT. column) | "sqFt" (SQ. FT + wastePct) | "calc" (Measurement x Install Height + wastePct)
   quantity: { source: "wasteSqFt", roundTo: 100, wastePct: 7 },
+  // "manual": type material $ and sf/day on each quote (lines start blank).  "catalog": pre-fill from the catalog above.
+  rateEntry: "manual",
   company: { name: "", address: "", phone: "", email: "", license: "", logoDataUrl: "" },
   terms: { validDays: 30, notes: ["No Spec"], taxPct: 0 },
   proposal: { showSplit: false, lumpSum: false, showUnitQty: true },

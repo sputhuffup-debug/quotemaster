@@ -52,6 +52,8 @@ input[type=text], input[type=number], input[type=date], input[type=email], input
 input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; }
 input.num { text-align: right; }
 input.overridden { background: #fff8d6; }
+input.required { border-color: #c33; background: #fff3f3; }
+input.required::placeholder { color: #c33; }
 textarea { width: 100%; resize: vertical; }
 
 /* ---------- top bar & tabs ---------- */
