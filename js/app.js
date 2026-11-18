@@ -334,8 +334,8 @@
         '<div class="grid">' +
           field('Hourly rate ($)', numInput('r-hourly', lab.hourlyRate, ' data-q="rates.labor.hourlyRate"')) +
           field('Hours / day', numInput('r-hours', lab.hoursPerDay, ' data-q="rates.labor.hoursPerDay"')) +
-          field('Daily adder ($)', numInput('r-adder', lab.dailyAdder, ' data-q="rates.labor.dailyAdder"')) +
-          field('Day rate', '<input type="text" class="num" readonly tabindex="-1" value="' + esc(U.formatMoney(priced.dayRate)) + '">') +
+          field('Per diem + vehicle ($/day)', numInput('r-adder', lab.dailyAdder, ' data-q="rates.labor.dailyAdder"')) +
+          field('Labor cost / day (all-in)', '<input type="text" class="num" readonly tabindex="-1" title="Hourly × hours + per diem & vehicle" value="' + esc(U.formatMoney(priced.dayRate)) + '">') +
           field('Round labor days', '<select id="r-dayround" data-q="rates.labor.dayRounding">' +
             options([['none', 'No rounding'], ['half', 'Up to ½ day'], ['whole', 'Up to whole day']], lab.dayRounding) + '</select>') +
           field('SF quantity from', '<select id="r-source" data-q="rates.quantity.source">' +
@@ -544,8 +544,8 @@
         '<div class="grid">' +
           field('Hourly rate ($)', numInput('s-hourly', s.labor.hourlyRate, ' data-s="labor.hourlyRate"')) +
           field('Hours / day', numInput('s-hours', s.labor.hoursPerDay, ' data-s="labor.hoursPerDay"')) +
-          field('Daily adder ($)', numInput('s-adder', s.labor.dailyAdder, ' data-s="labor.dailyAdder"')) +
-          field('Day rate', '<input type="text" class="num" readonly tabindex="-1" id="s-dayrate" value="' + esc(U.formatMoney(P.dayRate(s.labor))) + '">') +
+          field('Per diem + vehicle ($/day)', numInput('s-adder', s.labor.dailyAdder, ' data-s="labor.dailyAdder"')) +
+          field('Labor cost / day (all-in)', '<input type="text" class="num" readonly tabindex="-1" id="s-dayrate" title="Hourly × hours + per diem & vehicle" value="' + esc(U.formatMoney(P.dayRate(s.labor))) + '">') +
           field('Round labor days', '<select id="s-dayround" data-s="labor.dayRounding">' + options([['none', 'No rounding'], ['half', 'Up to ½ day'], ['whole', 'Up to whole day']], s.labor.dayRounding) + '</select>') +
           field('SF quantity from', '<select id="s-source" data-s="quantity.source">' + options([['wasteSqFt', 'Waste Sq FT. column'], ['sqFt', 'SQ. FT column + waste %'], ['calc', 'Length × Install Ht + waste %']], s.quantity.source) + '</select>') +
           field('Round SF up to', numInput('s-roundto', s.quantity.roundTo, ' data-s="quantity.roundTo"')) +

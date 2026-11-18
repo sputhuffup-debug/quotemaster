@@ -227,8 +227,8 @@
     }).join('');
 
     var lab = quote.rates.labor;
-    var rateLine = 'Day rate: ' + U.formatMoney(lab.hourlyRate) + '/hr &times; ' + U.formatNumber(+lab.hoursPerDay, 2) + ' hrs + ' +
-      U.formatMoney(lab.dailyAdder) + ' adder = <strong>' + U.formatMoney(priced.dayRate) + '</strong>' +
+    var rateLine = 'Labor cost/day: ' + U.formatMoney(lab.hourlyRate) + '/hr &times; ' + U.formatNumber(+lab.hoursPerDay, 2) + ' hrs + ' +
+      U.formatMoney(lab.dailyAdder) + ' per diem &amp; vehicle = <strong>' + U.formatMoney(priced.dayRate) + '</strong>' +
       ' &nbsp;|&nbsp; Labor days: ' + U.formatNumber(priced.totals.laborDays, 3) +
       ' (rounding: ' + esc(lab.dayRounding || 'none') + ')' +
       ' &nbsp;|&nbsp; Quantity source: ' + esc({ wasteSqFt: 'Waste Sq FT.', sqFt: 'SQ. FT + ' + quote.rates.quantity.wastePct + '% waste', calc: 'Length × Height + ' + quote.rates.quantity.wastePct + '% waste' }[quote.rates.quantity.source] || quote.rates.quantity.source);

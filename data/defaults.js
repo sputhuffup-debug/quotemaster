@@ -21,6 +21,7 @@ window.DEFAULTS = {
   ],
   // Remembered Bluebeam Subject -> catalog subject mappings ("__ignore__" = leave off the quote).
   subjectMap: {},
+  // Labor cost per crew-day = hourlyRate × hoursPerDay + dailyAdder (per diem + vehicle use) = $1,584.00
   labor: { hourlyRate: 148, hoursPerDay: 8, dailyAdder: 400, dayRounding: "none" },
   // source: "wasteSqFt" (Bluebeam Waste Sq FT. column) | "sqFt" (SQ. FT + wastePct) | "calc" (Measurement x Install Height + wastePct)
   quantity: { source: "wasteSqFt", roundTo: 100, wastePct: 7 },

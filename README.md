@@ -117,7 +117,7 @@ This is reverse-engineered from the current Excel template (`Template` sheet, ro
 | Lineal Ft | `J9 = ROUNDUP(L9/K9, 0)` | `ceil(totalSq / height)` |
 | **Material (M)** | `H9 = L9 * 2.85` | `totalSq × materialRatePerSf` |
 | **Labor (L)** | `H10 = L9 / 320 * A11` | `(totalSq / sfPerDay) × dayRate` |
-| Day rate | `A11 = 148*8 + 400` | `hourlyRate × hoursPerDay + dailyAdder` |
+| Day rate | `A11 = 148*8 + 400` | `hourlyRate × hoursPerDay + dailyAdder`. This is the all-in labor cost per crew-day: `dailyAdder` covers per diem and vehicle use. In Excel it can sit in any cell; the app computes it from Settings. |
 | **Line total** | `D15 = SUM(H9:I12)` | `M + L` |
 
 Labor days are **not** rounded in the current sheet (6.875 days). Make rounding a setting: `none | half | whole`, default `none` to match the current numbers.
@@ -235,7 +235,8 @@ All six milestones are implemented. `test/tests.html` covers milestones 1 and 2,
 - [ ] **Rounding:** is "Total SQ" always the Waste Sq Ft rounded **up to the nearest 100**?
 - [ ] **`SQ. FT` vs length × height:** the Bluebeam values don't exactly equal Measurement × 8 (181.69 × 8 = 1,453.5, but the CSV says 1,469). What formula does the Revu custom column use? Should the app trust it or recompute it?
 - [ ] **`Mat. Height`** (16 and 8 in the sample): is this panel sheet height, and does it affect pricing?
-- [ ] **Labor formula pieces:** confirm 320 sf/day production, $148/hr, 8 hrs, and what the $400/day adder covers (travel? per diem?). Is it the same on every job?
+- [x] **Day rate:** $1,584/day is the all-in labor cost per crew-day: $148/hr × 8 hrs plus $400 for per diem and vehicle use. The UI labels the $400 "Per diem + vehicle".
+- [ ] **Labor production:** confirm 320 sf/day. Is the day rate the same on every job? (It can be changed per quote on the Pricing tab.)
 - [ ] **GC proposal:** show the material/labor split, or a lump sum only? Is tax included or excluded?
 - [ ] Other products besides FRP (other subjects, other units such as LF trim or EA corners)?
 - [ ] Standard exclusions / terms text to include on every proposal.
