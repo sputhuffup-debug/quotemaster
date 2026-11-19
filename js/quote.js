@@ -220,7 +220,7 @@
       return '' +
         '<tbody class="doc-line">' +
         '<tr>' +
-          '<td>' + esc(l.scopeLabel) + '</td>' +
+          '<td class="doc-scope-label">' + esc(l.scopeLabel) + '</td>' +
           '<td>' + esc(l.description) + (l.code ? '<div class="doc-code">' + esc(l.code) + '</div>' : '') + '</td>' +
           '<td class="num">' + (l.linealFt !== null ? U.formatNumber(l.linealFt) : '') + '</td>' +
           '<td class="num">' + (l.height ? esc(U.formatFeet(l.height)) : '') + '</td>' +
@@ -307,7 +307,7 @@
     if (!lump) head += '<th class="num">Price</th>';
 
     var body = lines.map(function (l) {
-      var r = '<tr><td>' + esc(l.scopeLabel) + '</td><td>' + esc(l.description) + '</td>';
+      var r = '<tr><td class="doc-scope-label">' + esc(l.scopeLabel) + '</td><td>' + esc(l.description) + '</td>';
       if (showQty) {
         r += '<td class="num">' + (l.linealFt !== null ? U.formatNumber(l.linealFt) : '') + '</td>' +
           '<td class="num">' + (l.height ? esc(U.formatFeet(l.height)) : '') + '</td>' +
