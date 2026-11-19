@@ -200,7 +200,9 @@
       eq(pr.totals.total, 17160, 'Grand total $17,160.00');
       eq(Units.formatMoney(pr.totals.total), '$17,160.00', 'formatted total');
       eq(l.description, 'FRP-CLASS C MARLITE S100 S2S WHITE SMOOTH PVC TRIM', 'description from catalog');
-      eq(l.scopeLabel, "@ 8' AFF", 'default scope label');
+      eq(l.scopeLabel, "@ 8' AFF", 'no Room column -> no room count yet');
+      eq(l.needsRooms, true, 'room count flagged as needed');
+      eq(pr.totals.linesMissingRooms, 1, 'counted in totals');
     });
 
     group('Pricing — manual rate entry (default)');
@@ -304,6 +306,26 @@
       pr = Pricing.price(q, rows);
       eq(pr.lines.length + pr.unmapped.length, 0, 'ignored -> neither priced nor unmapped');
     });
+    test('scope of work "(X) ROOMS @ X\' AFF"', function () {
+      var s = freshSettings();
+      var q = Quote.newQuote(s);
+      var key = Pricing.price(q, fixture().rows).lines[0].key;
+      q.lineOverrides[key] = { rooms: '3' };
+      var l = Pricing.price(q, fixture().rows).lines[0];
+      eq(l.scopeLabel, "(3) ROOMS @ 8' AFF", 'matches the Excel sheet');
+      eq(l.needsRooms, false, 'no longer flagged');
+      q.lineOverrides[key] = { rooms: '1' };
+      eq(Pricing.price(q, fixture().rows).lines[0].scopeLabel, "(1) ROOM @ 8' AFF", 'singular');
+      q.lineOverrides[key] = { rooms: '3', height: "9'-6\"" };
+      eq(Pricing.price(q, fixture().rows).lines[0].scopeLabel, "(3) ROOMS @ 9'-6\" AFF", 'height follows the line');
+      q.lineOverrides[key] = { rooms: 'x' };
+      eq(Pricing.price(q, fixture().rows).lines[0].needsRooms, true, 'non-number ignored');
+      q.lineOverrides[key] = { scopeLabel: 'KITCHEN & DISH ROOM' };
+      l = Pricing.price(q, fixture().rows).lines[0];
+      eq(l.scopeLabel, 'KITCHEN & DISH ROOM', 'typed label wins');
+      eq(l.needsRooms, false, 'typed label needs no room count');
+      ok(/\(3\) ROOMS @ 8' AFF|KITCHEN/.test(Quote.render(q, Pricing.price(q, fixture().rows), s, 'proposal')), 'printed on proposal');
+    });
     test('different heights -> separate lines', function () {
       var s = freshSettings();
       var q = Quote.newQuote(s);
@@ -318,7 +340,8 @@
       var rows = Parse.parseCsvText("Subject,Room,Page Index,Install Height,Waste Sq FT.\nFRP-8',Kitchen,1,8',150\nFRP-8',Dish,1,8',120\nFRP-8',Kitchen,2,8',10\n").rows;
       var pr = Pricing.price(q, rows);
       eq(pr.lines.length, 1, 'one line by default');
-      eq(pr.lines[0].scopeLabel, "(2) ROOMS  @ 8' AFF", 'room count in scope label');
+      eq(pr.lines[0].scopeLabel, "(2) ROOMS @ 8' AFF", 'room count from Room column');
+      eq(pr.lines[0].needsRooms, false, 'not flagged');
       q.groupByRoom = true;
       pr = Pricing.price(q, rows);
       eq(pr.lines.length, 2, 'one line per room');

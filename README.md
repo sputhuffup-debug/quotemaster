@@ -21,7 +21,7 @@ To run it, double-click `index.html`. To run the tests, double-click `test/tests
 
 1. **Settings** tab: enter your company name, address and logo. Check the catalog and labor rates. Click **Export settings** to keep a backup.
 2. **Import** tab: drop the Bluebeam Markups Summary CSV. Check the subtotal check and the subject mapping.
-3. **Pricing** tab: type the **material $/sf** and **install sf/day** for each line. They start blank, and red fields still need a value. Any other rate or quantity can be adjusted for this quote only; changed fields turn yellow.
+3. **Pricing** tab: type the **number of rooms**, the **material $/sf** and the **install sf/day** for each line. The room count builds the scope of work, e.g. "(3) ROOMS @ 8' AFF". They start blank, and red fields still need a value. Any other rate or quantity can be adjusted for this quote only; changed fields turn yellow.
 4. **Quote** tab: fill in the GC, project, construction type and notes. Then use **Print proposal** or **Print internal**, and choose **Save as PDF**.
 5. **Save quote** (or Ctrl+S) writes a `.json` file. **Open quote…** re-opens it with its original rates.
 
@@ -35,7 +35,7 @@ These use the Mel's Drive In sample takeoff (`test/fixtures/mels-drive-in.csv`) 
 
 ![Import tab](docs/screenshots/1-import.png)
 
-**2. Pricing:** material $/sf and install sf/day are typed in per line. Labor comes from sf ÷ sf/day × $1,584/day.
+**2. Pricing:** room count, material $/sf and install sf/day are typed in per line. Labor comes from sf ÷ sf/day × $1,584/day.
 
 ![Pricing tab](docs/screenshots/2-pricing.png)
 
@@ -172,6 +172,10 @@ Labor days are **not** rounded in the current sheet (6.875 days). Make rounding 
   - Set `rateEntry` to `"catalog"` (Settings → Labor & quantities, or per quote on the Pricing tab) to pre-fill both values from the catalog instead.
   - Quotes saved before this option existed open in catalog mode, so their totals don't change.
 - **Per-quote overrides:** each quote stores a snapshot of the catalog, labor and quantity settings. Any line can override its quantity, height, $/unit or units/day. Blank means automatic.
+- **Scope of work label:** each wall (sf) line reads `(X) ROOMS @ X' AFF`, matching the Excel sheet.
+  - The room count is filled in from the number of distinct Room/Space values in the takeoff. Revu exports often leave that blank, so otherwise it is typed in the Rooms column on the Pricing tab and flagged until entered.
+  - The height comes from the line's install height.
+  - The label can also be typed over by hand. Clearing it brings back the automatic label.
 - **Manual lines** can be added for items that aren't in the takeoff. They are priced at the quantity typed, with no rounding.
 - **Sales tax:** an optional % on material (`terms.taxPct`, default 0). The tax line is only shown when it is non-zero.
 - Money is rounded to the cent per line. Totals are the sum of the line totals.

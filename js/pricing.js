@@ -90,11 +90,18 @@
     return { qty: null, basis: 'missing' };
   }
 
+  /** "(3) ROOMS @ 8' AFF" — the scope-of-work label from the Excel sheet. */
   function defaultScopeLabel(line) {
     var parts = [];
-    if (line.rooms.length) parts.push('(' + line.rooms.length + ') ' + (line.rooms.length === 1 ? 'ROOM' : 'ROOMS'));
+    if (line.roomCount) parts.push('(' + line.roomCount + ') ' + (line.roomCount === 1 ? 'ROOM' : 'ROOMS'));
     if (line.unit === 'sf' && line.height) parts.push('@ ' + U.formatFeet(line.height) + ' AFF');
-    return parts.join('  ');
+    return parts.join(' ');
+  }
+
+  /** Whole number of rooms >= 1, or null. */
+  function parseRooms(v) {
+    var n = U.parseNumber(v);
+    return n !== null && n >= 1 ? Math.round(n) : null;
   }
 
   /**
@@ -236,8 +243,15 @@
       if (line.unitsPerDay === null) line.missingRates.push(item.unit + '/day');
       line.description = ov.description !== undefined ? ov.description : (item.description || item.subject);
       line.scope = ov.scope !== undefined ? ov.scope : (item.scope || '');
+      // Room count: typed on the Pricing tab, else the number of distinct Room/Space values in the takeoff.
+      line.roomsAuto = g.rooms.length || null;
+      line.roomsOverridden = parseRooms(ov.rooms) !== null;
+      line.roomCount = line.roomsOverridden ? parseRooms(ov.rooms) : line.roomsAuto;
       line.scopeLabelAuto = defaultScopeLabel(line);
-      line.scopeLabel = ov.scopeLabel !== undefined ? ov.scopeLabel : line.scopeLabelAuto;
+      line.scopeLabelOverridden = ov.scopeLabel !== undefined;
+      line.scopeLabel = line.scopeLabelOverridden ? ov.scopeLabel : line.scopeLabelAuto;
+      // Wall (sf) lines read "(X) ROOMS @ X' AFF"; flag them until the room count is known.
+      line.needsRooms = item.unit === 'sf' && line.roomCount === null && !line.scopeLabelOverridden;
       line.dayRate = dr;
       line.laborDaysRaw = line.unitsPerDay > 0 ? line.qty / line.unitsPerDay : 0;   // 0 sf/day = no labor
       line.laborDays = U.roundDays(line.laborDaysRaw, rates.labor.dayRounding);
@@ -247,9 +261,14 @@
       return line;
     });
 
-    var totals = { material: 0, labor: 0, laborDays: 0, subtotal: 0, tax: 0, total: 0, taxPct: num(quote.taxPct, 0), linesMissingRates: 0 };
+    var totals = { material: 0, labor: 0, laborDays: 0, subtotal: 0, tax: 0, total: 0, taxPct: num(quote.taxPct, 0), linesMissingRates: 0, linesMissingRooms: 0 };
     lines.forEach(function (l) {
       if (l.excluded) return;
+      if (l.needsRooms) {
+        totals.linesMissingRooms++;
+        warnings.push({ level: 'warn', code: 'needsrooms', lineKey: l.key,
+          message: (l.scopeLabel || l.catalogSubject) + ' (' + l.catalogSubject + '): enter the number of rooms for the scope of work, e.g. "(3) ROOMS ' + (l.scopeLabel || '') + '".' });
+      }
       if (l.missingRates.length) {
         totals.linesMissingRates++;
         warnings.push({ level: 'warn', code: 'needsrate', lineKey: l.key,

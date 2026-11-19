@@ -377,9 +377,23 @@
           ' class="num ' + (cls || '') + (has ? ' overridden' : '') + '" title="Blank = ' + esc(auto) + '"');
       }
       var unitTxt = Q.unitLabel(l.unit).toLowerCase();
+      function roomsInput(l, ov, id) {
+        var has = ov.rooms !== undefined && ov.rooms !== '';
+        var attrs = ' data-line="' + esc(l.key) + '" data-ov="rooms" style="width:56px"';
+        if (l.roomsAuto) {
+          return numInput(id, has ? ov.rooms : '', attrs + ' placeholder="' + l.roomsAuto + '" class="num' + (has ? ' overridden' : '') + '"' +
+            ' title="Blank = ' + l.roomsAuto + ' (rooms named in the takeoff)"');
+        }
+        var need = l.needsRooms && !l.excluded;
+        return numInput(id, has ? ov.rooms : '', attrs + ' placeholder="' + (need ? '#' : '') + '" class="num' + (need ? ' required' : '') + '"' +
+          ' title="Number of rooms, for the scope of work: (3) ROOMS @ 8\' AFF"');
+      }
       return '<tr class="' + (l.excluded ? 'excluded' : '') + '">' +
         '<td><input type="checkbox" id="ln-x-' + i + '" data-line="' + esc(l.key) + '" data-ov="excluded"' + (l.excluded ? '' : ' checked') + ' title="Include on quote"></td>' +
-        '<td>' + textInput('ln-label-' + i, l.scopeLabel, ' data-line="' + esc(l.key) + '" data-ov="scopeLabel" style="min-width:150px"') + '</td>' +
+        '<td>' + roomsInput(l, ov, 'ln-rooms-' + i) + '</td>' +
+        '<td>' + textInput('ln-label-' + i, l.scopeLabelOverridden ? l.scopeLabel : '', ' data-line="' + esc(l.key) + '" data-ov="scopeLabel" placeholder="' + esc(l.scopeLabelAuto) + '"' +
+          (l.scopeLabelOverridden ? ' class="overridden" title="Typed by hand; clear it to go back to the automatic label"' : ' title="Automatic: (rooms) ROOMS @ height AFF. Type here to replace it."') +
+          ' style="min-width:170px"') + '</td>' +
         '<td class="item-cell"><strong>' + esc(l.catalogSubject) + '</strong>' + (l.manual ? ' <span class="pill">manual</span>' : '') +
           (l.room ? ' <span class="pill">' + esc(l.room) + '</span>' : '') +
           '<div class="hint">' + esc(l.description) + '</div></td>' +
@@ -420,10 +434,10 @@
         messages(warn) +
         empty +
         (lines.length ? '<div class="table-wrap"><table class="data"><thead><tr>' +
-          '<th></th><th>Scope label</th><th>Item</th><th>Height</th><th class="num">Takeoff qty</th><th>Priced qty</th><th class="num">Lineal ft</th>' +
+          '<th></th><th>Rooms</th><th>Scope of work</th><th>Item</th><th>Height</th><th class="num">Takeoff qty</th><th>Priced qty</th><th class="num">Lineal ft</th>' +
           '<th>' + (anyNonSf ? 'Material $ / unit' : 'Material $ / sf') + '</th><th>' + (anyNonSf ? 'Install units / day' : 'Install sf / day') + '</th><th class="num">Labor days</th><th class="num">Material</th><th class="num">Labor</th><th class="num">Total</th><th></th>' +
           '</tr></thead><tbody>' + body + '</tbody>' +
-          '<tfoot><tr><td></td><td colspan="8">Totals</td><td class="num">' + U.formatNumber(t.laborDays, 3) + '</td>' +
+          '<tfoot><tr><td></td><td colspan="9">Totals</td><td class="num">' + U.formatNumber(t.laborDays, 3) + '</td>' +
           '<td class="num">' + U.formatMoney(t.material) + '</td><td class="num">' + U.formatMoney(t.labor) + '</td>' +
           '<td class="num">' + U.formatMoney(t.subtotal) + '</td><td></td></tr></tfoot></table></div>' : '') +
         addRow +
@@ -494,6 +508,8 @@
         '</div>' +
         (state.priced.totals.linesMissingRates ? messages([{ level: 'error', message: state.priced.totals.linesMissingRates +
           ' line(s) still need material $ and/or install sf/day. Enter them on the Pricing tab before sending this quote.' }]) : '') +
+        (state.priced.totals.linesMissingRooms ? messages([{ level: 'warn', message: state.priced.totals.linesMissingRooms +
+          ' line(s) need a room count for the scope of work, e.g. "(3) ROOMS @ 8\' AFF". Enter it in the Rooms column on the Pricing tab.' }]) : '') +
         '<div class="preview" id="preview">' + Q.render(q, state.priced, state.settings, state.previewMode) + '</div>' +
         '<p class="hint">Print opens the browser print dialog — choose <strong>Save as PDF</strong> as the destination.</p>' +
       '</div>';
@@ -776,7 +792,11 @@
 
   function printDoc(mode) {
     var missing = state.priced.totals.linesMissingRates;
-    if (missing && !global.confirm(missing + ' line' + (missing === 1 ? ' is' : 's are') + ' missing material $ or install sf/day, so the total is too low.\nPrint anyway?')) return;
+    var noRooms = state.priced.totals.linesMissingRooms;
+    var problems = [];
+    if (missing) problems.push(missing + ' line' + (missing === 1 ? ' is' : 's are') + ' missing material $ or install sf/day, so the total is too low.');
+    if (noRooms) problems.push(noRooms + ' line' + (noRooms === 1 ? ' has' : 's have') + ' no room count, so the scope of work won\'t say "(X) ROOMS".');
+    if (problems.length && !global.confirm(problems.join('\n') + '\nPrint anyway?')) return;
     var root = $('#print-root');
     root.innerHTML = Q.render(state.quote, state.priced, state.settings, mode);
     var oldTitle = doc.title;
@@ -805,7 +825,8 @@
 
   function setLineOverride(key, f, value) {
     var ov = state.quote.lineOverrides[key] || (state.quote.lineOverrides[key] = {});
-    var numeric = { qty: 1, height: 1, materialRate: 1, unitsPerDay: 1 };
+    // Clearing these fields goes back to the automatic value.
+    var numeric = { qty: 1, height: 1, materialRate: 1, unitsPerDay: 1, rooms: 1, scopeLabel: 1 };
     if (numeric[f] && String(value).trim() === '') delete ov[f];
     else ov[f] = value;
     if (!Object.keys(ov).length) delete state.quote.lineOverrides[key];

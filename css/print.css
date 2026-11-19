@@ -24,6 +24,7 @@
 .doc-lines tbody.doc-line { break-inside: avoid; }
 .doc-lines tr.doc-calc td { font-size: 8pt; color: #555; padding-top: 0; border-bottom: 1px solid #999; }
 .doc-lines tbody.doc-line tr:first-child td { border-bottom: 0; }
+.doc-lines td.doc-scope-label { white-space: nowrap; }   /* keep "(3) ROOMS @ 8' AFF" on one line */
 .doc-code { font-size: 8pt; color: #666; }
 .doc-empty { text-align: center; color: #777; font-style: italic; }
 
