@@ -127,17 +127,24 @@
     var c = settings.company || {};
     var contact = [c.phone, c.email].filter(Boolean).map(esc).join(' &middot; ');
     var exp = expiryDate(quote);
-    return '' +
-      '<header class="doc-head">' +
-        '<div class="doc-company">' +
+    var banner = c.logoDataUrl && c.logoLayout === 'banner';
+    var license = c.license ? (/lic/i.test(c.license) ? esc(c.license) : 'Lic. ' + esc(c.license)) : '';
+    // A letterhead logo already shows name, address and licenses: print only the phone / email under it.
+    var company = banner
+      ? '<div class="doc-company doc-company-banner"><img class="doc-banner" src="' + esc(c.logoDataUrl) + '" alt="' + esc(c.name) + '">' +
+          (contact ? '<div class="doc-banner-contact">' + contact + '</div>' : '') + '</div>'
+      : '<div class="doc-company">' +
           (c.logoDataUrl ? '<img class="doc-logo" src="' + esc(c.logoDataUrl) + '" alt="">' : '') +
           '<div>' +
             (c.name ? '<div class="doc-company-name">' + esc(c.name) + '</div>' : '') +
             (c.address ? '<div>' + escMultiline(c.address) + '</div>' : '') +
             (contact ? '<div>' + contact + '</div>' : '') +
-            (c.license ? '<div>Lic. ' + esc(c.license) + '</div>' : '') +
+            (license ? '<div>' + license + '</div>' : '') +
           '</div>' +
-        '</div>' +
+        '</div>';
+    return '' +
+      '<header class="doc-head">' +
+        company +
         '<div class="doc-title">' +
           '<h1>' + esc(title) + '</h1>' +
           '<table class="doc-meta">' +

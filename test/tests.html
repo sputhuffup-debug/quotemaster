@@ -447,7 +447,7 @@
       eq(RqbStorage.normalizeSettings({ quantity: { roundTo: 100 } }).quantity.roundTo, 0, 'old default 100 -> 0');
       eq(RqbStorage.normalizeSettings({ quantity: { roundTo: 50 } }).quantity.roundTo, 50, 'a chosen value is kept');
       eq(RqbStorage.normalizeSettings({ version: 2, quantity: { roundTo: 100 } }).quantity.roundTo, 100, 'v2 settings with 100 chosen are kept');
-      eq(RqbStorage.normalizeSettings({}).version, 2, 'version recorded');
+      eq(RqbStorage.normalizeSettings({}).version, DEFAULTS.version, 'current version recorded');
     });
     test('labor entered as days', function () {
       var s = RqbStorage.normalizeSettings(null);
@@ -663,6 +663,35 @@
       q.proposal.lumpSum = true;
       var lump = Quote.render(q, pr, s, 'proposal');
       ok(/Lump sum total/.test(lump), 'lump sum label');
+    });
+    test('company letterhead', function () {
+      var s = RqbStorage.normalizeSettings(null);
+      eq(s.company.name, 'Universal Plastics, Inc.', 'default company');
+      eq(s.company.logoLayout, 'banner', 'letterhead layout');
+      var q = Quote.newQuote(s);
+      var pr = Pricing.price(q, fixture().rows);
+      var doc = Quote.render(q, pr, s, 'proposal');
+      ok(/<img class="doc-banner" src="img\/universal-plastics-logo\.png"/.test(doc), 'letterhead image in the header');
+      ok(!/1020 Winding Creek/.test(doc), 'address not printed twice (it is in the image)');
+      ok(/Universal Plastics, Inc\.<\/div>/.test(doc), 'company name on the signature line');
+      ok(/doc-banner/.test(Quote.render(q, pr, s, 'internal')), 'internal take-off too');
+      s.company.phone = '(916) 555-0100';
+      ok(/doc-banner-contact">\(916\) 555-0100/.test(Quote.render(q, pr, s, 'proposal')), 'phone shown under the letterhead');
+      s.company.logoLayout = 'beside';
+      doc = Quote.render(q, pr, s, 'proposal');
+      ok(/doc-logo/.test(doc) && /1020 Winding Creek/.test(doc), 'beside layout prints the text block');
+      ok(/CA Lic# 390876/.test(doc) && !/Lic\. CA Lic#/.test(doc), 'license not double-prefixed');
+    });
+    test('settings upgrade to the letterhead', function () {
+      var blank = RqbStorage.normalizeSettings({ version: 2, company: { name: '', address: '', phone: '', email: '', license: '', logoDataUrl: '' } });
+      eq(blank.company.logoDataUrl, 'img/universal-plastics-logo.png', 'blank company -> letterhead');
+      eq(blank.company.name, 'Universal Plastics, Inc.', 'and name');
+      var mine = RqbStorage.normalizeSettings({ version: 2, company: { name: 'Someone Else', logoDataUrl: 'data:image/png;base64,AAA' } });
+      eq(mine.company.name, 'Someone Else', 'entered company kept');
+      eq(mine.company.logoDataUrl, 'data:image/png;base64,AAA', 'uploaded logo kept');
+      eq(mine.company.logoLayout, 'beside', 'earlier upload treated as a small logo');
+      var v3 = RqbStorage.normalizeSettings({ version: 3, company: { name: '', logoDataUrl: '' } });
+      eq(v3.company.logoDataUrl, '', 'removing the logo on v3 sticks');
     });
     test('settings normalization', function () {
       var s = RqbStorage.normalizeSettings({ labor: { hourlyRate: 150 }, catalog: [{ subject: 'X', materialRatePerSf: 1, sfPerDay: 100 }] });

@@ -8,7 +8,7 @@
  *   roundTo       optional: round the priced quantity up to this multiple (default: quantity.roundTo for sf, 1 otherwise)
  */
 window.DEFAULTS = {
-  version: 2,   // settings format; see RqbStorage.normalizeSettings for upgrades
+  version: 3,   // settings format; see RqbStorage.normalizeSettings for upgrades
   catalog: [
     {
       subject: "FRP-8'",
@@ -31,7 +31,18 @@ window.DEFAULTS = {
   rateEntry: "manual",
   // Last imported material price list (Settings -> Material price list): { fileName, sheetName, importedAt, itemCount }
   priceList: null,
-  company: { name: "", address: "", phone: "", email: "", license: "", logoDataUrl: "" },
+  // logoDataUrl: an uploaded image (data: URL) or a path relative to index.html.
+  // logoLayout: "banner" = the logo is a full letterhead (name, address, licenses) and replaces the text block;
+  //             "beside" = a small logo next to the company details below.
+  company: {
+    name: "Universal Plastics, Inc.",
+    address: "1020 Winding Creek Road #130, Roseville, CA 95678",
+    phone: "",
+    email: "",
+    license: "CA Lic# 390876 • NV Lic# 0006651A",
+    logoDataUrl: "img/universal-plastics-logo.png",
+    logoLayout: "banner"
+  },
   terms: { validDays: 30, notes: ["No Spec"], taxPct: 0 },
   proposal: { showSplit: false, lumpSum: false, showUnitQty: true },
   quote: { nextNumber: 1001, prefix: "Q-" }

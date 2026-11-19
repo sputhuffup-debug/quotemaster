@@ -19,7 +19,7 @@ To run it, double-click `index.html`. To run the tests, double-click `test/tests
 
 ### Quick start
 
-1. **Settings** tab: enter your company name, address and logo. Check the catalog and labor rates. Click **Export settings** to keep a backup.
+1. **Settings** tab: the Universal Plastics letterhead and company details are filled in by default. Add a phone/email if wanted. Check the catalog and labor rates. Click **Export settings** to keep a backup.
 2. **Import** tab: drop the Bluebeam Markups Summary CSV. Check the subtotal check and the subject mapping.
 3. **Pricing** tab: for each line, fill in the scope of work (**count**, **type** such as ROOMS / AREAS / SOFFITS, and an optional **note** such as "o/ CMU"), then the **material $/sf** and the **install sf/day**. These build labels like "(3) ROOMS @ 8' AFF" or "(7) AREAS @ 10' AFF o/ CMU". Set **Per diem + vehicle** to 0 on local jobs. These start blank, and red fields still need a value.
    - **Total SQ** starts as the Waste Sq Ft from Bluebeam, shown alongside for checking. Type your own number in Total SQ; a value below the takeoff gets a **red border**.
@@ -32,7 +32,7 @@ You can also drop a `.csv` (import) or `.json` (saved quote or settings export) 
 
 ### Screenshots
 
-These use the Mel's Drive In sample takeoff (`test/fixtures/mels-drive-in.csv`) and placeholder company details.
+These use the Mel's Drive In sample takeoff (`test/fixtures/mels-drive-in.csv`) and the Universal Plastics letterhead.
 
 **1. Import:** the Bluebeam CSV is parsed, checked against its subtotal row, and each subject is mapped to a catalog item.
 
@@ -83,6 +83,8 @@ revu-quote-builder/
 ├── lib/
 │   ├── papaparse.min.js    # vendored CSV parser v5.4.1 (MIT)
 │   └── papaparse.LICENSE
+├── img/
+│   └── universal-plastics-logo.png  # default letterhead on quotes
 ├── docs/
 │   └── screenshots/        # README images
 ├── test/
@@ -284,7 +286,7 @@ Material costs are kept in an Excel workbook, expected to hold around 150 items,
 
 Header and fields mirror the current sheet:
 
-- **Header:** company logo + name, title ("OFFICIAL MATERIAL TAKE-OFF" internally / "PROPOSAL" for the GC), date (today, `mm-dd-yy`), quote number
+- **Header:** company letterhead or logo + name, title ("OFFICIAL MATERIAL TAKE-OFF" internally / "PROPOSAL" for the GC), date (today, `mm-dd-yy`), quote number
 - **To:** General contractor name
 - **Project:** name (e.g. *Mel's Drive In*) + address (e.g. *2165 Lombard St, San Francisco CA, 94123*)
 - **Line items** (up to ~15, same as the template's row blocks):
@@ -301,6 +303,14 @@ Two print views from the same data:
 Output = `print.css` + `window.print()` → user picks "Save as PDF". No PDF library needed.
 
 ---
+
+**Company letterhead.**
+- The default logo is `img/universal-plastics-logo.png`, the full Universal Plastics letterhead with name, address and CA/NV licenses. It prints as a banner in the header, with no duplicate text block; phone/email, if entered, print under it.
+- The company name is also used on the proposal's signature line.
+- To use a different image: Settings → Company → Replace logo, or replace the file.
+  - Wide images (3:1 or wider) are treated as a letterhead. Others print as a small logo beside the company details.
+  - **Logo style** switches between the two.
+- Browsers that had no company details saved get the letterhead automatically (settings `version: 3`). Details someone entered are kept.
 
 ## 6. Screens
 
