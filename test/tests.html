@@ -71,6 +71,12 @@
     // Most pricing tests check the Excel formulas, so they use catalog rates (2.85 $/sf, 320 sf/day).
     // The Mel's sheet priced 2,184 waste sf as 2,200, so these formula tests round up to 100 (the old default).
     function freshSettings() { var s = RqbStorage.normalizeSettings(null); s.rateEntry = 'catalog'; s.quantity.roundTo = 100; return s; }
+    // Most tests price the Mel's Drive In takeoff, a San Francisco (Bay Area, $148/hr) job.
+    function newQ(settings) {
+      var q = Quote.newQuote(settings);
+      q.project.address = '2165 Lombard St, San Francisco CA, 94123';
+      return q;
+    }
     function fixture() { return Parse.parseCsvText(window.FIXTURES['mels-drive-in.csv']); }
 
     /* ---------------- Units ---------------- */
@@ -187,7 +193,7 @@
     test('golden numbers', function () {
       var s = RqbStorage.normalizeSettings(null);
       s.rateEntry = 'catalog';
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var pr = Pricing.price(q, fixture().rows);
       eq(pr.lines.length, 1, 'one line item');
       eq(pr.lines[0].qty, 2184, 'Total SQ starts as the Waste Sq Ft sum (no rounding by default)');
@@ -215,10 +221,10 @@
     group('Pricing — manual rate entry (default)');
     test('defaults to manual entry', function () {
       eq(RqbStorage.normalizeSettings(null).rateEntry, 'manual', 'settings default');
-      eq(Quote.newQuote(RqbStorage.normalizeSettings(null)).rates.rateEntry, 'manual', 'new quote');
+      eq(newQ(RqbStorage.normalizeSettings(null)).rates.rateEntry, 'manual', 'new quote');
     });
     test('blank rates until typed in', function () {
-      var q = Quote.newQuote(RqbStorage.normalizeSettings(null));
+      var q = newQ(RqbStorage.normalizeSettings(null));
       var pr = Pricing.price(q, fixture().rows);
       var l = pr.lines[0];
       eq(l.materialRate, null, 'material rate blank');
@@ -230,7 +236,7 @@
       ok(/INCOMPLETE/.test(Quote.render(q, pr, RqbStorage.normalizeSettings(null), 'internal')), 'internal printout flags it');
     });
     test('typed rates give the golden total', function () {
-      var q = Quote.newQuote(RqbStorage.normalizeSettings(null));
+      var q = newQ(RqbStorage.normalizeSettings(null));
       var key = Pricing.price(q, fixture().rows).lines[0].key;
       q.lineOverrides[key] = { qty: '2200', materialRate: '2.85' };
       var pr = Pricing.price(q, fixture().rows);
@@ -248,14 +254,14 @@
       eq(pr.totals.linesMissingRates, 0, '0 counts as entered');
     });
     test('excluded lines do not need rates', function () {
-      var q = Quote.newQuote(RqbStorage.normalizeSettings(null));
+      var q = newQ(RqbStorage.normalizeSettings(null));
       var key = Pricing.price(q, fixture().rows).lines[0].key;
       q.lineOverrides[key] = { excluded: true };
       eq(Pricing.price(q, fixture().rows).totals.linesMissingRates, 0, 'not flagged');
     });
     test('older saved quotes keep catalog pricing', function () {
       var s = RqbStorage.normalizeSettings(null);
-      var legacy = Quote.newQuote(s);
+      var legacy = newQ(s);
       delete legacy.rates.rateEntry;
       legacy.rates.quantity.roundTo = 100;   // old files carry the old rounding
       legacy.source = { rows: fixture().rows };
@@ -272,8 +278,10 @@
       s.catalog.push(Pricing.normalizeCatalogItem({
         subject: 'FRP-A-VARIETEX', description: 'FRP-CLASS A VALTO VARIETEX LINEN SILHOUETTE TRIM',
         scope: 'FURNISH AND INSTALL CLASS A VALTO VARIETEX FRP WITH PVC TRIM AT ALL EDGES AND SEAMS', unit: 'sf' }));
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       ["FRP-10'", "FRP-10' CMU", 'FRP-SOFFIT'].forEach(function (subj) { q.rates.subjectMap[subj] = 'FRP-A-VARIETEX'; });
+      q.project.address = '3051 Woodcreek Oaks Blvd, Roseville CA, 95747';   // Local area ...
+      q.rates.labor.hourlyRate = '148';   // ... but that sheet was priced at $148/hr
       q.rates.labor.dailyAdder = 0;
       q.rates.quantity.roundTo = 0;
       var rows = Parse.parseCsvText([
@@ -310,7 +318,7 @@
     group('Pricing — scope label and line grouping');
     test('nouns, notes and AFF', function () {
       var s = freshSettings();
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var key = Pricing.price(q, fixture().rows).lines[0].key;
       q.lineOverrides[key] = { rooms: '2', roomNoun: 'walls', scopeNote: 'BOH' };
       eq(Pricing.price(q, fixture().rows).lines[0].scopeLabel, "(2) WALLS @ 8' AFF BOH", 'noun upper-cased, note appended');
@@ -322,7 +330,7 @@
     test('guesses from the Bluebeam subject', function () {
       var s = freshSettings();
       s.subjectMap = { 'FRP SOFFIT': "FRP-8'", "FRP-8' CMU": "FRP-8'" };
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var rows = Parse.parseCsvText("Subject,Page Index,Install Height,Waste Sq FT.\nFRP SOFFIT,1,2',50\nFRP-8' CMU,1,8',100\n").rows;
       var L = Pricing.price(q, rows).lines;
       var soffit = L.filter(function (l) { return l.subject === 'FRP SOFFIT'; })[0];
@@ -336,7 +344,7 @@
     test('two subjects, same item, same height -> two lines', function () {
       var s = freshSettings();
       s.subjectMap = { 'Kitchen FRP': "FRP-8'", 'Restroom FRP': "FRP-8'" };
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var rows = Parse.parseCsvText("Subject,Page Index,Install Height,Waste Sq FT.\nRestroom FRP,1,8',100\nKitchen FRP,1,8',200\nRestroom FRP,2,8',50\n").rows;
       var L = Pricing.price(q, rows).lines;
       eq(L.length, 2, 'two lines');
@@ -346,7 +354,7 @@
     test('overrides saved under the old line keys still apply', function () {
       var s = RqbStorage.normalizeSettings(null);
       s.subjectMap = { 'Wall A': "FRP-8'" };
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       q.lineOverrides["FRP-8'|8"] = { qty: '2200', materialRate: '2.85', unitsPerDay: '320' };   // pre-change key format
       var rows = Parse.parseCsvText("Subject,Page Index,Install Height,Waste Sq FT.\nWall A,1,8',2184\n").rows;
       var l = Pricing.price(q, rows).lines[0];
@@ -366,9 +374,10 @@
         { subject: "126-MARLITE-4'", code: '126', description: '126-MARLITE NATURAL TEAK', unit: 'sf' },
         { subject: "FRP-CUSTOMSYM-6'", code: '155,156', description: '155,156-MARLITE CUSTOM SYMMETRIX', unit: 'sf' }
       ].map(Pricing.normalizeCatalogItem);
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       q.source = { fileName: 'vons-1754.csv', rows: p.rows, subtotals: p.subtotals, warnings: p.warnings };
-      q.rates.labor.hourlyRate = '140'; q.rates.labor.hoursPerDay = '9';   // A17 = 140*9+400
+      q.project.address = '5638 e. kings canyon, Fresno CA, 93727';   // Local area
+      q.rates.labor.hoursPerDay = '9';   // A17 = 140*9+400 (Local $140/hr is the default)
       var pr = Pricing.price(q, p.rows);
       var raw = pr.lines.map(function (l) { return l.rawQty; });
       eq(raw.join(','), '1351,2978,1576', 'Waste Sq Ft basis per line');
@@ -401,7 +410,7 @@
       var p = Parse.parseCsvText(window.FIXTURES['vons-1754.csv']);
       var s = RqbStorage.normalizeSettings(null);
       s.subjectMap = { "104-FRP-10'": "FRP-8'", "126-MARLITE-4'": "FRP-8'", "FRP-CUSTOMSYM-6'": "FRP-8'" };
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       q.source = { rows: p.rows, subtotals: p.subtotals };
       var marlite = function () { return Pricing.price(q, p.rows).lines.filter(function (l) { return l.subject === "126-MARLITE-4'"; })[0]; };
       eq(marlite().roomCount, 15, '(15) from the group row');
@@ -414,7 +423,7 @@
       eq(marlite().scopeLabel, "(4) ROOMS @ 4' AFF", 'typed count wins');
       var split = Parse.parseCsvText("Subject,Page Index,Install Height,Waste Sq FT.\nW (3),,,300\nW,1,8',100\nW,1,8',100\nW,2,4',100\n");
       s.subjectMap.W = "FRP-8'";
-      var q2 = Quote.newQuote(s);
+      var q2 = newQ(s);
       q2.source = { rows: split.rows, subtotals: split.subtotals };
       var L = Pricing.price(q2, split.rows).lines;
       eq(L.map(function (l) { return l.roomCount; }).join(','), '1,2', 'subject split by height -> markups per line, not (3) each');
@@ -453,7 +462,7 @@
       var s = RqbStorage.normalizeSettings(null);
       s.rateEntry = 'catalog';
       s.subjectMap = { 'CORNER GUARD': "FRP-8'", 'PVC CAP': "FRP-8'" };   // mapped to an sf item on purpose
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       q.source = { rows: p.rows, subtotals: p.subtotals };
       var pr = Pricing.price(q, p.rows);
       var by = {};
@@ -486,7 +495,7 @@
       var p = Parse.parseCsvText("Subject,Page Index,Measurement,Install Height,Waste Sq FT.\nW,1,10,8',80\nW,1,25,LF,\n");
       var s = RqbStorage.normalizeSettings(null);
       s.subjectMap = { W: "FRP-8'" };
-      var L = Pricing.price(Quote.newQuote(s), p.rows).lines;
+      var L = Pricing.price(newQ(s), p.rows).lines;
       eq(L.map(function (l) { return l.unit + ':' + l.qty; }).join(','), 'sf:80,lf:25', 'sf line and LF line');
     });
     test('"12 ea" in the Measurement cell', function () {
@@ -495,11 +504,74 @@
       eq(p.rows[0].rowUnit, 'ea', 'EA');
     });
 
+    group('Pricing — union rates: Local vs Bay Area');
+    test('city from the project address', function () {
+      var C = DEFAULTS.bayAreaCities;
+      eq(Pricing.cityFromAddress('2165 Lombard St, San Francisco CA, 94123', C), 'San Francisco', 'street, City CA, zip');
+      eq(Pricing.cityFromAddress('3051 Woodcreek Oaks Blvd, Roseville CA, 95747', C), 'Roseville', 'Roseville');
+      eq(Pricing.cityFromAddress('5638 e. kings canyon, Fresno CA, 93727', C), 'Fresno', 'Fresno');
+      eq(Pricing.cityFromAddress('123 Main St, Oakland, CA 94607', C), 'Oakland', 'street, City, CA zip');
+      eq(Pricing.cityFromAddress('500 El Camino Real, Suite 4, Palo Alto, California 94301', C), 'Palo Alto', 'suite and "California"');
+      eq(Pricing.cityFromAddress('1 Market St San Jose CA 95112', C), 'San Jose', 'no commas');
+      eq(Pricing.cityFromAddress('San Jose Ave & 1st St, Roseville CA', C), 'Roseville', 'a street named after a Bay Area city');
+      eq(Pricing.cityFromAddress('', C), null, 'blank');
+    });
+    test('rate picked from the city', function () {
+      var s = RqbStorage.normalizeSettings(null);
+      eq(s.labor.hourlyRate, 140, 'Local $140/hr default');
+      eq(s.labor.bayAreaHourlyRate, 148, 'Bay Area $148/hr default');
+      ok(s.bayAreaCities.length > 90, 'nine-county city list');
+      var q = Quote.newQuote(s);
+      var rows = fixture().rows;
+      var dr = function () { return Pricing.price(q, rows).dayRate; };
+      eq(Pricing.price(q, rows).laborArea.zone, 'local', 'no address -> Local');
+      eq(dr(), 140 * 8 + 400, 'Local day rate $1,520');
+      q.project.address = '2165 Lombard St, San Francisco CA, 94123';
+      eq(Pricing.price(q, rows).laborArea.zone, 'bay', 'San Francisco -> Bay Area');
+      eq(dr(), 1584, 'Bay Area day rate $1,584');
+      q.project.address = '1 Main St, st helena, ca 94574';
+      eq(Pricing.price(q, rows).laborArea.zone, 'bay', '"st helena" matches "St. Helena"');
+      q.project.address = '3051 Woodcreek Oaks Blvd, Roseville CA, 95747';
+      eq(Pricing.price(q, rows).laborArea.zone, 'local', 'Roseville -> Local');
+      q.laborZone = 'bay';
+      eq(dr(), 1584, 'picked Bay Area on the Pricing tab');
+      q.laborZone = 'auto';
+      q.rates.bayAreaCities = q.rates.bayAreaCities.concat(['Roseville']);
+      eq(Pricing.price(q, rows).laborArea.zone, 'bay', 'edited city list');
+    });
+    test('unset rate is flagged', function () {
+      var s = RqbStorage.normalizeSettings(null);
+      s.rateEntry = 'catalog';
+      s.labor.bayAreaHourlyRate = '';
+      var q = newQ(s);
+      var pr = Pricing.price(q, fixture().rows);
+      eq(pr.totals.linesMissingRates, 1, 'line incomplete');
+      ok(pr.warnings.some(function (w) { return w.code === 'needshourly' && /Bay Area/.test(w.message) && /San Francisco/.test(w.message); }), 'one clear warning');
+      ok(/Bay Area rate \(San Francisco\) <strong>not set<\/strong>/.test(Quote.render(q, pr, s, 'internal')), 'internal take-off says so');
+      q.lineOverrides[pr.lines[0].key] = { unitsPerDay: '0' };
+      eq(Pricing.price(q, fixture().rows).totals.linesMissingRates, 0, 'material-only line does not need it');
+    });
+    test('upgrades and saved quotes', function () {
+      var old = RqbStorage.normalizeSettings({ version: 3, labor: { hourlyRate: 148, hoursPerDay: 8, dailyAdder: 400 } });
+      eq(old.labor.hourlyRate + '/' + old.labor.bayAreaHourlyRate, '140/148', 'old default $148 -> Local 140 / Bay Area 148');
+      var mine = RqbStorage.normalizeSettings({ version: 3, labor: { hourlyRate: 150 } });
+      eq(mine.labor.hourlyRate + '/' + mine.labor.bayAreaHourlyRate, '150/148', 'a rate someone set is kept as Local');
+      var s = RqbStorage.normalizeSettings(null);
+      var legacy = Quote.newQuote(s);
+      delete legacy.laborZone; delete legacy.rates.bayAreaCities;
+      legacy.rates.labor = { hourlyRate: 148, hoursPerDay: 8, dailyAdder: 400, dayRounding: 'none' };
+      legacy.project.address = '2165 Lombard St, San Francisco CA, 94123';
+      var q = Quote.fromFile({ kind: Quote.FILE_KIND, quote: JSON.parse(JSON.stringify(legacy)) }, s);
+      eq(q.laborZone, 'local', 'old quote keeps its single rate');
+      eq(Pricing.price(q, fixture().rows).dayRate, 1584, 'still $1,584/day');
+      ok(Array.isArray(q.rates.bayAreaCities) && q.rates.bayAreaCities.length > 90, 'city list filled in');
+    });
+
     group('Pricing — Total SQ vs takeoff');
     test('no rounding by default; typed Total SQ below takeoff is flagged', function () {
       var s = RqbStorage.normalizeSettings(null);
       eq(s.quantity.roundTo, 0, 'default: no rounding');
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var l = Pricing.price(q, fixture().rows).lines[0];
       eq(l.qty, 2184, 'Total SQ = Waste Sq Ft sum');
       q.lineOverrides[l.key] = { qty: '2100' };
@@ -522,7 +594,7 @@
     });
     test('labor entered as days', function () {
       var s = RqbStorage.normalizeSettings(null);
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var key = Pricing.price(q, fixture().rows).lines[0].key;
       q.lineOverrides[key] = { materialRate: '2', laborDays: '2.5' };
       var l = Pricing.price(q, fixture().rows).lines[0];
@@ -537,7 +609,7 @@
     group('Pricing — options and overrides');
     test('day rounding', function () {
       var s = freshSettings();
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       q.rates.labor.dayRounding = 'whole';
       var l = Pricing.price(q, fixture().rows).lines[0];
       eq(l.laborDays, 7, 'whole -> 7 days');
@@ -547,21 +619,21 @@
     });
     test('per-quote overrides', function () {
       var s = freshSettings();
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var key = Pricing.price(q, fixture().rows).lines[0].key;
       q.lineOverrides[key] = { qty: '2,300', materialRate: '3' };
       var l = Pricing.price(q, fixture().rows).lines[0];
       eq(l.qty, 2300, 'qty override');
       eq(l.material, 6900, 'material at $3');
       eq(l.linealFt, 288, 'lineal ft ceil(2300/8)');
-      q.rates.labor.hourlyRate = '150';
+      q.rates.labor.bayAreaHourlyRate = '150';   // SF job -> Bay Area rate
       eq(Pricing.price(q, fixture().rows).dayRate, 1600, 'string hourly rate parsed');
       q.lineOverrides[key] = { excluded: true };
       eq(Pricing.price(q, fixture().rows).totals.total, 0, 'excluded line not totalled');
     });
     test('excluded rows', function () {
       var s = freshSettings();
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var rows = fixture().rows;
       q.excludedRows[rows[1].id] = true;
       var l = Pricing.price(q, rows).lines[0];
@@ -570,7 +642,7 @@
     });
     test('unmapped and ignored subjects', function () {
       var s = freshSettings();
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var rows = Parse.parseCsvText('Subject,Page Index,Install Height,Waste Sq FT.\nMystery,1,8\',100\n').rows;
       var pr = Pricing.price(q, rows);
       eq(pr.lines.length, 0, 'not priced');
@@ -586,7 +658,7 @@
     });
     test('scope of work "(X) ROOMS @ X\' AFF"', function () {
       var s = freshSettings();
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var key = Pricing.price(q, fixture().rows).lines[0].key;
       q.lineOverrides[key] = { rooms: '3' };
       var l = Pricing.price(q, fixture().rows).lines[0];
@@ -606,7 +678,7 @@
     });
     test('different heights -> separate lines', function () {
       var s = freshSettings();
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var rows = Parse.parseCsvText("Subject,Page Index,Install Height,Waste Sq FT.\nFRP-8',1,8',100\nFRP-8',1,4',50\n").rows;
       var pr = Pricing.price(q, rows);
       eq(pr.lines.length, 2, 'two lines');
@@ -614,7 +686,7 @@
     });
     test('group by room', function () {
       var s = freshSettings();
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var rows = Parse.parseCsvText("Subject,Room,Page Index,Install Height,Waste Sq FT.\nFRP-8',Kitchen,1,8',150\nFRP-8',Dish,1,8',120\nFRP-8',Kitchen,2,8',10\n").rows;
       var pr = Pricing.price(q, rows);
       eq(pr.lines.length, 1, 'one line by default');
@@ -627,7 +699,7 @@
     });
     test('quantity fallbacks', function () {
       var s = freshSettings();
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var rows = Parse.parseCsvText("Subject,Page Index,Measurement,Install Height,SQ. FT,Waste Sq FT.\nFRP-8',1,100,8',800,\n").rows;
       var pr = Pricing.price(q, rows);
       eq(pr.lines[0].rawQty, 856, 'SQ. FT × 1.07 when waste column blank');
@@ -645,7 +717,7 @@
       var s = freshSettings();
       s.catalog.push(Pricing.normalizeCatalogItem({ subject: 'Trim', unit: 'lf', materialRate: 2, unitsPerDay: 200 }));
       s.catalog.push(Pricing.normalizeCatalogItem({ subject: 'Corner', unit: 'ea', materialRate: 5, unitsPerDay: 0 }));
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var rows = Parse.parseCsvText('Subject,Page Index,Measurement,Measurement Unit\nTrim,1,10.2,ft\nTrim,1,5.1,ft\nCorner,1,1,Count\nCorner,1,1,Count\nCorner,2,1,Count\n').rows;
       var pr = Pricing.price(q, rows);
       var trim = pr.lines.filter(function (l) { return l.catalogSubject === 'Trim'; })[0];
@@ -659,7 +731,7 @@
     });
     test('manual lines', function () {
       var s = freshSettings();
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       q.manualLines.push({ id: 'm1', catalogSubject: "FRP-8'", qty: 150, height: "8'" });
       var pr = Pricing.price(q, []);
       eq(pr.lines.length, 1, 'manual line priced');
@@ -668,7 +740,7 @@
     });
     test('sales tax on material', function () {
       var s = freshSettings();
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       q.taxPct = '8.625';
       var t = Pricing.price(q, fixture().rows).totals;
       eq(t.tax, 540.79, 'tax = 6,270 × 8.625%');
@@ -686,19 +758,19 @@
     group('Quote model');
     test('numbering increments on first save only', function () {
       var s = freshSettings();
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       eq(q.number, 'Q-1001', 'provisional number');
       ok(Quote.commitNumber(q, s), 'first commit changes settings');
       eq(q.number, 'Q-1001', 'number assigned');
       eq(s.quote.nextNumber, 1002, 'next number bumped');
       ok(!Quote.commitNumber(q, s), 'second save keeps number');
       eq(s.quote.nextNumber, 1002, 'not bumped again');
-      var q2 = Quote.newQuote(s);
+      var q2 = newQ(s);
       eq(q2.number, 'Q-1002', 'next quote gets 1002');
     });
     test('save file round-trip keeps original rates', function () {
       var s = freshSettings();
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var p = fixture();
       q.source = { fileName: 'x.csv', rows: p.rows, subtotals: p.subtotals, warnings: p.warnings };
       var json = JSON.parse(JSON.stringify(Quote.toFile(q)));
@@ -713,7 +785,7 @@
     test('render internal and proposal', function () {
       var s = freshSettings();
       s.company.name = 'Acme <FRP>';
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       q.gc.name = 'Generals';
       q.project.name = "Mel's Drive In";
       q.constructionType = 'new';
@@ -739,7 +811,7 @@
       var s = RqbStorage.normalizeSettings(null);
       eq(s.company.name, 'Universal Plastics, Inc.', 'default company');
       eq(s.company.logoLayout, 'banner', 'letterhead layout');
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var pr = Pricing.price(q, fixture().rows);
       var doc = Quote.render(q, pr, s, 'proposal');
       ok(/<img class="doc-banner" src="img\/universal-plastics-logo\.png"/.test(doc), 'letterhead image in the header');
@@ -822,7 +894,7 @@
     test('blank costs in catalog mode must be typed in', function () {
       var s = freshSettings();
       s.catalog.push(Pricing.normalizeCatalogItem({ subject: 'X', unit: 'sf', materialRate: 4 }));
-      var q = Quote.newQuote(s);
+      var q = newQ(s);
       var rows = Parse.parseCsvText("Subject,Page Index,Install Height,Waste Sq FT.\nX,1,8',100\n").rows;
       var pr = Pricing.price(q, rows);
       eq(pr.lines[0].materialRate, 4, 'cost from catalog');

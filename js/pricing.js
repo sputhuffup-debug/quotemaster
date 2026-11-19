@@ -39,6 +39,55 @@
     return num(labor.hourlyRate, 0) * num(labor.hoursPerDay, 0) + num(labor.dailyAdder, 0);
   }
 
+  /* ---------- union wage area: Local vs Bay Area ---------- */
+
+  function normCity(s) {
+    return String(s || '').toLowerCase().replace(/^st\.?\s+/, 'saint ').replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
+  }
+
+  /**
+   * City from a project address:
+   *   "2165 Lombard St, San Francisco CA, 94123" -> "San Francisco"
+   *   "123 Main St, Oakland, CA 94607"           -> "Oakland"
+   *   "123 Main St San Jose CA 95112"            -> "San Jose" (no commas: matched against knownCities)
+   */
+  function cityFromAddress(address, knownCities) {
+    var parts = String(address || '').replace(/\r?\n/g, ',').split(',').map(function (p) {
+      return p.replace(/\b\d{5}(-\d{4})?\b/g, ' ')
+        .replace(/\b(california|calif\.?)\b/gi, ' ')
+        .replace(/\s+/g, ' ').trim()
+        .replace(/(^|\s)ca\.?$/i, '')            // state: CA / ca
+        .replace(/(^|\s)[A-Z]{2}\.?$/, '')        // other states, upper-case only (NV, OR ...)
+        .trim();
+    }).filter(Boolean);
+    if (!parts.length) return null;
+    var last = parts[parts.length - 1];
+    if (parts.length >= 2 || !/\d/.test(last)) return last;
+    // One chunk with a street number: look for a known city at the end.
+    var hay = ' ' + normCity(last);
+    var best = null;
+    (knownCities || []).forEach(function (c) {
+      var n = normCity(c);
+      if (n && hay.slice(-(n.length + 1)) === ' ' + n && (!best || n.length > normCity(best).length)) best = c;
+    });
+    return best;
+  }
+
+  /**
+   * Which union rate a quote uses.
+   * quote.laborZone: "auto" (from the project city) | "local" | "bay"
+   * Returns { mode, zone: "local"|"bay", city, inList }
+   */
+  function laborArea(quote) {
+    var cities = (quote.rates && quote.rates.bayAreaCities) || (global.DEFAULTS && global.DEFAULTS.bayAreaCities) || [];
+    var city = cityFromAddress(quote.project && quote.project.address, cities);
+    var set = {};
+    cities.forEach(function (c) { set[normCity(c)] = true; });
+    var inList = !!(city && set[normCity(city)]);
+    var mode = quote.laborZone === 'local' || quote.laborZone === 'bay' ? quote.laborZone : 'auto';
+    return { mode: mode, zone: mode === 'auto' ? (inList ? 'bay' : 'local') : mode, city: city, inList: inList };
+  }
+
   function findCatalogItem(catalog, subject) {
     var key = String(subject || '').trim().toLowerCase();
     for (var i = 0; i < catalog.length; i++) {
@@ -160,7 +209,10 @@
     var manualRates = rates.rateEntry === 'manual';
     var overrides = quote.lineOverrides || {};
     var excluded = quote.excludedRows || {};
-    var dr = dayRate(rates.labor);
+    var area = laborArea(quote);
+    var hourly = area.zone === 'bay' ? rates.labor.bayAreaHourlyRate : rates.labor.hourlyRate;
+    var hourlyMissing = U.parseNumber(hourly) === null;
+    var dr = dayRate(Object.assign({}, rates.labor, { hourlyRate: hourly }));
     var warnings = [];
     var groups = {};
     var order = [];
@@ -305,11 +357,14 @@
       line.materialRate = rate('materialRate');     // null = not entered yet (manual mode)
       line.unitsPerDay = rate('unitsPerDay');
       line.missingRates = [];
+      line.missingHourly = false;
       if (line.materialRate === null) line.missingRates.push('material $/' + unit);
       // Labor can be entered as a number of days instead (e.g. 9 days for custom work).
       var daysOv = ov.laborDays !== undefined && ov.laborDays !== '' ? U.parseNumber(ov.laborDays) : null;
       line.laborDaysOverridden = daysOv !== null && daysOv >= 0;
       if (line.unitsPerDay === null && !line.laborDaysOverridden) line.missingRates.push(unit + '/day');
+      // The union hourly rate for this area isn't set: any line with labor is incomplete.
+      if (hourlyMissing && !(line.unitsPerDay === 0 && !line.laborDaysOverridden)) line.missingHourly = true;
       line.description = ov.description !== undefined ? ov.description : (item.description || item.subject);
       line.scope = ov.scope !== undefined ? ov.scope : (item.scope || '');
       // Scope count default: the Bluebeam group count ("(15)") when this line holds all of that subject's
@@ -360,6 +415,7 @@
         warnings.push({ level: 'warn', code: 'needsrooms', lineKey: l.key,
           message: (l.scopeLabel || l.catalogSubject) + ' (' + (l.subject || l.catalogSubject) + '): enter the count for the scope of work, e.g. "(3) ' + l.roomNoun + ' ' + (l.scopeLabel || '') + '".' });
       }
+      if (l.missingHourly && !l.missingRates.length) totals.linesMissingRates++;
       if (l.missingRates.length) {
         totals.linesMissingRates++;
         warnings.push({ level: 'warn', code: 'needsrate', lineKey: l.key,
@@ -375,6 +431,11 @@
     totals.tax = U.roundMoney(totals.material * totals.taxPct / 100);
     totals.total = U.roundMoney(totals.subtotal + totals.tax);
 
+    if (lines.some(function (l) { return l.missingHourly && !l.excluded; })) {
+      warnings.unshift({ level: 'warn', code: 'needshourly',
+        message: 'This job uses the ' + (area.zone === 'bay' ? 'Bay Area' : 'Local') + ' rate' + (area.city ? ' (' + area.city + ')' : '') +
+          ', but that hourly rate is not set. Enter it under Rates for this quote, or in Settings.' });
+    }
     Object.keys(unmapped).forEach(function (s) {
       warnings.unshift({ level: 'warn', code: 'unmapped', subject: s, message: 'Subject "' + s + '" (' + unmapped[s].rows + ' row' + (unmapped[s].rows === 1 ? '' : 's') + ') is not mapped to a catalog item and is not priced.' });
     });
@@ -383,6 +444,8 @@
       lines: lines,
       totals: totals,
       dayRate: dr,
+      laborArea: area,
+      hourlyRate: U.parseNumber(hourly),
       unmapped: Object.keys(unmapped).map(function (k) { return unmapped[k]; }),
       ignored: ignored,
       warnings: warnings
@@ -394,6 +457,8 @@
     IGNORE: IGNORE,
     price: price,
     dayRate: dayRate,
+    cityFromAddress: cityFromAddress,
+    laborArea: laborArea,
     rowQuantity: rowQuantity,
     rowUnit: rowUnit,
     resolveSubject: resolveSubject,

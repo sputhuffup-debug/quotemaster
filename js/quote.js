@@ -32,6 +32,7 @@
       quantity: clone(settings.quantity),
       subjectMap: clone(settings.subjectMap || {}),
       rateEntry: settings.rateEntry === 'catalog' ? 'catalog' : 'manual',
+      bayAreaCities: clone(settings.bayAreaCities || []),
       priceList: settings.priceList ? clone(settings.priceList) : null
     };
   }
@@ -49,6 +50,7 @@
       taxPct: settings.terms.taxPct || 0,
       proposal: clone(settings.proposal || { showSplit: false, lumpSum: false, showUnitQty: true }),
       groupByRoom: false,
+      laborZone: 'auto',     // union rate: "auto" (from the project city) | "local" | "bay"
       source: null,          // { fileName, importedAt, headers, rows, subtotals, warnings }
       excludedRows: {},
       manualLines: [],
@@ -73,6 +75,9 @@
     // Quotes saved before manual rate entry existed were priced from the catalog; keep their numbers.
     if (out.rates.rateEntry !== 'manual' && out.rates.rateEntry !== 'catalog') out.rates.rateEntry = 'catalog';
     out.rates.labor = Object.assign({}, settings.labor, out.rates.labor || {});
+    if (!Array.isArray(out.rates.bayAreaCities)) out.rates.bayAreaCities = clone(settings.bayAreaCities || []);
+    // Quotes saved before the two union rates existed were priced at the one (local) rate: keep that.
+    if (q && q.laborZone === undefined) out.laborZone = 'local';
     out.rates.quantity = Object.assign({}, settings.quantity, out.rates.quantity || {});
     if (Array.isArray(out.notes)) out.notes = out.notes.join('\n');
     return out;
@@ -253,7 +258,9 @@
     }).join('');
 
     var lab = quote.rates.labor;
-    var rateLine = 'Labor cost/day: ' + U.formatMoney(lab.hourlyRate) + '/hr &times; ' + U.formatNumber(+lab.hoursPerDay, 2) + ' hrs + ' +
+    var ar = priced.laborArea || { zone: 'local' };
+    var rateLine = 'Labor cost/day: ' + (ar.zone === 'bay' ? 'Bay Area' : 'Local') + ' rate' + (ar.city ? ' (' + esc(ar.city) + ')' : '') + ' ' +
+      (priced.hourlyRate === null || priced.hourlyRate === undefined ? '<strong>not set</strong>' : U.formatMoney(priced.hourlyRate)) + '/hr &times; ' + U.formatNumber(+lab.hoursPerDay, 2) + ' hrs + ' +
       U.formatMoney(lab.dailyAdder) + ' per diem &amp; vehicle = <strong>' + U.formatMoney(priced.dayRate) + '</strong>' +
       ' &nbsp;|&nbsp; Labor days: ' + U.formatNumber(priced.totals.laborDays, 3) +
       ' (rounding: ' + esc(lab.dayRounding || 'none') + ')' +
