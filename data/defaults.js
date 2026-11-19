@@ -8,6 +8,7 @@
  *   roundTo       optional: round the priced quantity up to this multiple (default: quantity.roundTo for sf, 1 otherwise)
  */
 window.DEFAULTS = {
+  version: 2,   // settings format; see RqbStorage.normalizeSettings for upgrades
   catalog: [
     {
       subject: "FRP-8'",
@@ -24,7 +25,8 @@ window.DEFAULTS = {
   // Labor cost per crew-day = hourlyRate × hoursPerDay + dailyAdder (per diem + vehicle use) = $1,584.00
   labor: { hourlyRate: 148, hoursPerDay: 8, dailyAdder: 400, dayRounding: "none" },
   // source: "wasteSqFt" (Bluebeam Waste Sq FT. column) | "sqFt" (SQ. FT + wastePct) | "calc" (Measurement x Install Height + wastePct)
-  quantity: { source: "wasteSqFt", roundTo: 100, wastePct: 7 },
+  // roundTo 0 = Total SQ is exactly the Waste Sq FT. sum; change it per line on the Pricing tab.
+  quantity: { source: "wasteSqFt", roundTo: 0, wastePct: 7 },
   // "manual": type material $ and sf/day on each quote (lines start blank).  "catalog": pre-fill from the catalog above.
   rateEntry: "manual",
   // Last imported material price list (Settings -> Material price list): { fileName, sheetName, importedAt, itemCount }
