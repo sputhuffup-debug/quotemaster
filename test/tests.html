@@ -207,9 +207,9 @@
       eq(pr.totals.total, 17160, 'Grand total $17,160.00');
       eq(Units.formatMoney(pr.totals.total), '$17,160.00', 'formatted total');
       eq(l.description, 'FRP-CLASS C MARLITE S100 S2S WHITE SMOOTH PVC TRIM', 'description from catalog');
-      eq(l.scopeLabel, "@ 8' AFF", 'no Room column -> no room count yet');
-      eq(l.needsRooms, true, 'room count flagged as needed');
-      eq(pr.totals.linesMissingRooms, 1, 'counted in totals');
+      eq(l.scopeLabel, "(2) ROOMS @ 8' AFF", 'count defaults to the 2 markups');
+      eq(l.needsRooms, false, 'nothing to flag');
+      eq(pr.totals.linesMissingRooms, 0, 'nothing missing');
     });
 
     group('Pricing — manual rate entry (default)');
@@ -328,7 +328,7 @@
       var soffit = L.filter(function (l) { return l.subject === 'FRP SOFFIT'; })[0];
       var cmu = L.filter(function (l) { return l.subject === "FRP-8' CMU"; })[0];
       eq(soffit.roomNoun, 'SOFFITS', 'soffit subject -> SOFFITS');
-      eq(soffit.scopeLabel, "@ 2'", 'no AFF before the count is known');
+      eq(soffit.scopeLabel, "(1) SOFFIT @ 2'", 'singular soffit, no AFF');
       eq(cmu.scopeNote, 'o/ CMU', 'CMU subject -> o/ CMU');
       q.lineOverrides[cmu.key] = { scopeNote: '' };
       eq(Pricing.price(q, rows).lines.filter(function (l) { return l.key === cmu.key; })[0].scopeNote, '', 'guess can be cleared');
@@ -367,13 +367,16 @@
         { subject: "FRP-CUSTOMSYM-6'", code: '155,156', description: '155,156-MARLITE CUSTOM SYMMETRIX', unit: 'sf' }
       ].map(Pricing.normalizeCatalogItem);
       var q = Quote.newQuote(s);
+      q.source = { fileName: 'vons-1754.csv', rows: p.rows, subtotals: p.subtotals, warnings: p.warnings };
       q.rates.labor.hourlyRate = '140'; q.rates.labor.hoursPerDay = '9';   // A17 = 140*9+400
       var pr = Pricing.price(q, p.rows);
       var raw = pr.lines.map(function (l) { return l.rawQty; });
       eq(raw.join(','), '1351,2978,1576', 'Waste Sq Ft basis per line');
       eq(pr.lines.map(function (l) { return l.qty; }).join(','), '1351,2978,1576', 'Total SQ defaults to the basis');
-      eq(pr.lines[1].roomNames.join(','), 'SALES', 'one Room name ...');
-      eq(pr.lines[1].needsRooms, true, '... but the count (4) must be typed');
+      eq(pr.lines.map(function (l) { return l.roomsAuto; }).join(','), '2,15,9', 'counts default to the Bluebeam group counts (2) (15) (9)');
+      eq(pr.lines[1].roomsSource, 'group', 'from the subtotal row');
+      eq(pr.lines[1].scopeLabel, "(15) ROOMS @ 4' AFF", 'default label');
+      eq(pr.lines[1].roomNames.join(','), 'SALES', 'Room name kept as a hint');
       var o = q.lineOverrides;
       o[pr.lines[0].key] = { rooms: '2', qty: '1500', materialRate: '3.6', unitsPerDay: '180' };
       o[pr.lines[1].key] = { rooms: '4', qty: '3300', materialRate: '0', unitsPerDay: '150' };
@@ -391,6 +394,34 @@
       eq(pr.totals.total, 70693.33, 'Total $70,693.33');
       eq(L.filter(function (l) { return l.qtyBelowTakeoff; }).length, 0, 'nothing below takeoff');
       ok(/9 days \(entered\)/.test(Quote.render(q, pr, s, 'internal')), 'internal take-off shows entered days');
+    });
+
+    group('Pricing — default scope count');
+    test('group count, unticked rows, split subjects, manual lines', function () {
+      var p = Parse.parseCsvText(window.FIXTURES['vons-1754.csv']);
+      var s = RqbStorage.normalizeSettings(null);
+      s.subjectMap = { "104-FRP-10'": "FRP-8'", "126-MARLITE-4'": "FRP-8'", "FRP-CUSTOMSYM-6'": "FRP-8'" };
+      var q = Quote.newQuote(s);
+      q.source = { rows: p.rows, subtotals: p.subtotals };
+      var marlite = function () { return Pricing.price(q, p.rows).lines.filter(function (l) { return l.subject === "126-MARLITE-4'"; })[0]; };
+      eq(marlite().roomCount, 15, '(15) from the group row');
+      var oneRow = p.rows.filter(function (r) { return r.baseSubject === "126-MARLITE-4'"; })[0];
+      q.excludedRows[oneRow.id] = true;
+      eq(marlite().roomCount, 14, 'a row unticked -> markups on the line (14)');
+      eq(marlite().roomsSource, 'markups', 'source noted');
+      delete q.excludedRows[oneRow.id];
+      q.lineOverrides[marlite().key] = { rooms: '4' };
+      eq(marlite().scopeLabel, "(4) ROOMS @ 4' AFF", 'typed count wins');
+      var split = Parse.parseCsvText("Subject,Page Index,Install Height,Waste Sq FT.\nW (3),,,300\nW,1,8',100\nW,1,8',100\nW,2,4',100\n");
+      s.subjectMap.W = "FRP-8'";
+      var q2 = Quote.newQuote(s);
+      q2.source = { rows: split.rows, subtotals: split.subtotals };
+      var L = Pricing.price(q2, split.rows).lines;
+      eq(L.map(function (l) { return l.roomCount; }).join(','), '1,2', 'subject split by height -> markups per line, not (3) each');
+      q2.manualLines.push({ id: 'm1', catalogSubject: "FRP-8'", qty: 10, height: "8'" });
+      var m = Pricing.price(q2, split.rows).lines.filter(function (l) { return l.manual; })[0];
+      eq(m.roomCount, null, 'manual line has no default count');
+      eq(m.needsRooms, true, 'manual sf line asks for a count');
     });
 
     group('Pricing — Total SQ vs takeoff');
@@ -495,7 +526,7 @@
       q.lineOverrides[key] = { rooms: '3', height: "9'-6\"" };
       eq(Pricing.price(q, fixture().rows).lines[0].scopeLabel, "(3) ROOMS @ 9'-6\" AFF", 'height follows the line');
       q.lineOverrides[key] = { rooms: 'x' };
-      eq(Pricing.price(q, fixture().rows).lines[0].needsRooms, true, 'non-number ignored');
+      eq(Pricing.price(q, fixture().rows).lines[0].roomCount, 2, 'non-number ignored -> default count');
       q.lineOverrides[key] = { scopeLabel: 'KITCHEN & DISH ROOM' };
       l = Pricing.price(q, fixture().rows).lines[0];
       eq(l.scopeLabel, 'KITCHEN & DISH ROOM', 'typed label wins');
@@ -516,8 +547,8 @@
       var rows = Parse.parseCsvText("Subject,Room,Page Index,Install Height,Waste Sq FT.\nFRP-8',Kitchen,1,8',150\nFRP-8',Dish,1,8',120\nFRP-8',Kitchen,2,8',10\n").rows;
       var pr = Pricing.price(q, rows);
       eq(pr.lines.length, 1, 'one line by default');
-      eq(pr.lines[0].scopeLabel, "@ 8' AFF", 'Room column does not fill the count (it is unreliable)');
-      eq(pr.lines[0].needsRooms, true, 'count must be typed');
+      eq(pr.lines[0].scopeLabel, "(3) ROOMS @ 8' AFF", 'count = markups, not distinct Room names');
+      eq(pr.lines[0].needsRooms, false, 'not flagged');
       eq(pr.lines[0].roomNames.join(','), 'Kitchen,Dish', 'room names kept as a hint');
       q.groupByRoom = true;
       pr = Pricing.price(q, rows);

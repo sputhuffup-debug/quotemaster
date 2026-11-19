@@ -188,7 +188,10 @@ Labor days are **not** rounded in the current sheet (6.875 days). Make rounding 
 - **Scope of work label:** built as `(count) TYPE @ height' AFF note`, matching the Excel sheets: `(3) ROOMS @ 8' AFF`, `(6) AREAS @ 10' AFF`, `(7) AREAS @ 10' AFF o/ CMU`, `(4) SOFFITS @ 2'`.
   - On the Pricing tab each line has a **count**, a **type** (ROOMS, AREAS, WALLS, COLUMNS, SOFFITS, CEILINGS) and an optional **note**.
   - SOFFITS and CEILINGS give a depth rather than a height above the floor, so they omit "AFF". A count of 1 uses the singular, e.g. "(1) ROOM".
-  - **Count:** always typed in, and flagged until entered. The takeoff's Room/Space names don't give a reliable count: in the Vons export, one Room ("SALES") held 4 rooms and "PRODUCE" held 9 signs. The names and the markup count are shown as a hint on the count box.
+  - **Count:** defaults to Bluebeam's group count, e.g. `104-FRP-10' (2)` → 2 and `126-MARLITE-4' (15)` → 15. Type over it when the real number differs (Vons: 15 markups, but "(4) ROOMS").
+    - If some of the subject's markups are unticked, or the subject is split across lines (two heights, or per-room lines), the default is the number of markups on that line instead.
+    - Manual lines have no default and are flagged until a count is entered.
+    - Room/Space names are not used for the count, since one Room ("SALES") can hold many rooms. Hovering over the count box shows them as a hint.
   - **Guesses from the Bluebeam subject:** a subject containing "SOFFIT" starts as SOFFITS (similarly CEILING, COLUMN), and one containing "CMU" gets the note "o/ CMU". Both can be changed.
   - The height comes from the line's install height.
   - The whole label can be typed by hand on the Quote tab (Line descriptions). Clearing it brings back the automatic label.

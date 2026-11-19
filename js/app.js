@@ -397,11 +397,17 @@
       function roomsInput(l, ov, id) {
         var has = ov.rooms !== undefined && ov.rooms !== '';
         var attrs = ' data-line="' + esc(l.key) + '" data-ov="rooms" style="width:56px"';
+        var where = l.roomNames.length ? ' (Room: ' + l.roomNames.join(', ') + ')' : '';
+        if (l.roomsAuto) {
+          var src = l.roomsSource === 'group'
+            ? 'the Bluebeam group count: ' + l.subject + ' (' + l.roomsAuto + ')'
+            : l.roomsAuto + ' markup' + (l.roomsAuto === 1 ? '' : 's') + ' on this line';
+          return numInput(id, has ? ov.rooms : '', attrs + ' placeholder="' + l.roomsAuto + '" class="num' + (has ? ' overridden' : '') + '"' +
+            ' title="' + esc((has ? 'Typed by hand. Clear it to use ' : 'Blank = ') + src + where + '. Type the real count of rooms / areas / soffits if different.') + '"');
+        }
         var need = l.needsRooms && !l.excluded;
-        var hint = l.manual ? '' : ' Takeoff: ' + l.rowCount + ' markup' + (l.rowCount === 1 ? '' : 's') +
-          (l.roomNames.length ? ' in ' + l.roomNames.join(', ') : '') + '.';
         return numInput(id, has ? ov.rooms : '', attrs + ' placeholder="' + (need ? '#' : '') + '" class="num' + (need ? ' required' : '') + '"' +
-          ' title="' + esc('How many rooms / areas / soffits, for the scope of work: (3) ROOMS @ 8\' AFF.' + hint) + '"');
+          ' title="How many rooms / areas / soffits, for the scope of work: (3) ROOMS @ 8\' AFF"');
       }
       return '<tr class="' + (l.excluded ? 'excluded' : '') + '">' +
         '<td><input type="checkbox" id="ln-x-' + i + '" data-line="' + esc(l.key) + '" data-ov="excluded"' + (l.excluded ? '' : ' checked') + ' title="Include on quote"></td>' +

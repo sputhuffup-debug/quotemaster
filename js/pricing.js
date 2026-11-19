@@ -161,12 +161,21 @@
     // One line per Bluebeam subject × install height (× room). Two subjects priced as the same catalog
     // item stay separate lines (e.g. "FRP-10'" and "FRP-10' CMU": same material, different sf/day).
     var subjectOrder = {};
+    // Default scope count = Bluebeam's group count, e.g. 2 from "104-FRP-10' (2)".
+    var groupCount = {};
+    ((quote.source && quote.source.subtotals) || []).forEach(function (st) {
+      if (st.count) groupCount[st.baseSubject] = st.count;
+    });
+    var subjectRows = {};     // all detail rows per subject, ticked or not
+    var subjectLines = {};    // how many lines each subject is split into
+    rows.forEach(function (r) { subjectRows[r.baseSubject] = (subjectRows[r.baseSubject] || 0) + 1; });
     function groupFor(item, subject, height, room) {
       var hKey = item.unit === 'sf' ? (height === null ? '?' : String(+height.toFixed(4))) : '';
       var roomKey = quote.groupByRoom ? '|' + (room || '') : '';
       var key = subject + '|' + hKey + roomKey;
       if (!groups[key]) {
         if (subjectOrder[subject] === undefined) subjectOrder[subject] = Object.keys(subjectOrder).length;
+        subjectLines[subject] = (subjectLines[subject] || 0) + 1;
         groups[key] = {
           key: key,
           legacyKey: item.subject + '|' + hKey + roomKey,   // key format before per-subject lines
@@ -286,11 +295,17 @@
       if (line.unitsPerDay === null && !line.laborDaysOverridden) line.missingRates.push(item.unit + '/day');
       line.description = ov.description !== undefined ? ov.description : (item.description || item.subject);
       line.scope = ov.scope !== undefined ? ov.scope : (item.scope || '');
-      // Room count: typed on the Pricing tab, else the number of distinct Room/Space values in the takeoff.
-      // Room/Space names from the takeoff are shown as a hint only: in real exports one Room ("SALES")
-      // can hold 4 rooms or 9 signs, so the count is always typed in.
+      // Scope count default: the Bluebeam group count ("(15)") when this line holds all of that subject's
+      // markups; otherwise (rows unticked, or the subject split by height/room) the markups on this line.
+      // Room/Space names are only a hint: one Room ("SALES") can hold many rooms.
       line.roomNames = g.rooms.slice();
-      line.roomsAuto = null;
+      if (g.manual || !g.rowIds.length) {
+        line.roomsAuto = null; line.roomsSource = null;
+      } else if (groupCount[g.subject] && subjectLines[g.subject] === 1 && g.rowIds.length === subjectRows[g.subject]) {
+        line.roomsAuto = groupCount[g.subject]; line.roomsSource = 'group';
+      } else {
+        line.roomsAuto = g.rowIds.length; line.roomsSource = 'markups';
+      }
       line.roomsOverridden = parseRooms(ov.rooms) !== null;
       line.roomCount = line.roomsOverridden ? parseRooms(ov.rooms) : line.roomsAuto;
       line.subject = g.subject || null;
