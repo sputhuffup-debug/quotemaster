@@ -28,6 +28,14 @@
     // v1 -> v2: quantities are no longer rounded up to 100 by default. Only the old default is changed;
     // a rounding value someone chose themselves (anything but 100) is kept.
     if (fromVersion < 2 && out.quantity && +out.quantity.roundTo === 100) out.quantity.roundTo = 0;
+    // v2 -> v3: the Universal Plastics letterhead became the default. Browsers that never filled in
+    // company details get it; anything someone entered is left alone.
+    if (fromVersion < 3) {
+      var inC = (s && s.company) || {};
+      var blank = !inC.name && !inC.logoDataUrl && !inC.address && !inC.license && !inC.phone && !inC.email;
+      if (blank) out.company = clone(global.DEFAULTS.company);
+      else if (!inC.logoLayout) out.company.logoLayout = 'beside';   // an earlier upload was a small logo
+    }
     out.version = global.DEFAULTS.version;
     out.catalog = (out.catalog || []).map(global.Pricing.normalizeCatalogItem);
     if (!Array.isArray(out.terms.notes)) out.terms.notes = String(out.terms.notes || '').split(/\r?\n/).filter(Boolean);

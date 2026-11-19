@@ -282,7 +282,7 @@
         '<td>' + esc(r.room || r.space) + '</td>' +
         '<td class="num">' + esc(r.page) + '</td>' +
         '<td>' + esc(r.label || r.comments) + '</td>' +
-        '<td class="num">' + U.formatNumber(r.measurement, 4) + '</td>' +
+        '<td class="num">' + U.formatNumber(r.measurement, 4) + (r.rowUnit === 'ea' ? ' ea' : (r.rowUnit === 'lf' ? ' lf' : '')) + '</td>' +
         '<td class="num">' + esc(r.installHeightText) + '</td>' +
         '<td class="num">' + (r.matHeight !== null ? U.formatNumber(r.matHeight, 2) : '') + '</td>' +
         '<td class="num">' + U.formatNumber(r.sqFt, 2) + '</td>' +
@@ -425,7 +425,7 @@
         '<td>' + (l.unit === 'sf' ? ovInput('height', 'ln-h-' + i, null, l.height !== null ? U.formatFeet(l.height) : '?', 'w-xs') : '') + '</td>' +
         '<td class="num">' + (l.manual ? '—' : U.formatNumber(l.rawQty, 2)) + (anyNonSf ? ' ' + esc(unitTxt) : '') + '</td>' +
         '<td>' + qtyInput(l, ov, 'ln-q-' + i) + '</td>' +
-        '<td class="num">' + (l.linealFt !== null ? U.formatNumber(l.linealFt) : '') + '</td>' +
+        '<td class="num">' + (l.linealFt !== null ? U.formatNumber(l.linealFt, l.unit === 'lf' ? 2 : 0) : '') + '</td>' +
         '<td>' + rateInput(l, ov, 'materialRate', 'ln-mr-' + i) + '</td>' +
         '<td>' + rateInput(l, ov, 'unitsPerDay', 'ln-pd-' + i) + '</td>' +
         '<td>' + numInput('ln-days-' + i, l.laborDaysOverridden ? ov.laborDays : '', ' data-line="' + esc(l.key) + '" data-ov="laborDays"' +
@@ -665,9 +665,12 @@
           field('Email', textInput('s-cemail', c.email, ' data-s="company.email"')) +
           field('License #', textInput('s-clic', c.license, ' data-s="company.license"')) +
           '<div class="field"><span>Logo</span>' +
-            (c.logoDataUrl ? '<img class="logo-preview" src="' + esc(c.logoDataUrl) + '" alt="Logo">' : '') +
+            (c.logoDataUrl ? '<img class="logo-preview' + (c.logoLayout === 'banner' ? ' banner' : '') + '" src="' + esc(c.logoDataUrl) + '" alt="Logo">' : '') +
             '<div class="row"><button type="button" data-act="pick-logo">' + (c.logoDataUrl ? 'Replace logo…' : 'Upload logo…') + '</button>' +
             (c.logoDataUrl ? '<button type="button" class="danger" data-act="del-logo">Remove</button>' : '') + '</div>' +
+            (c.logoDataUrl ? '<label class="field" style="margin-top:6px"><span>Logo style</span><select id="s-logolayout" data-s="company.logoLayout">' +
+              options([['banner', 'Letterhead: logo includes name, address, licenses'], ['beside', 'Small logo beside the company details']], c.logoLayout || 'beside') +
+              '</select></label>' : '') +
             '<input type="file" id="file-logo" accept="image/*" hidden></div>' +
         '</div>' +
       '</div>' +
@@ -949,7 +952,10 @@
       case 'new-cat': {
         var subj = b.dataset.subject;
         if (!P.findCatalogItem(s.catalog, subj)) {
-          s.catalog.push(P.normalizeCatalogItem({ subject: subj, code: '', description: subj, scope: '', unit: 'sf', materialRate: 0, unitsPerDay: 0 }));
+          // Count markups -> EA item, "LF" install height -> LF item, else square feet.
+          var units = rows().filter(function (r) { return r.baseSubject === subj; }).map(function (r) { return global.Parse.rowUnit(r) || 'sf'; });
+          var newUnit = units.length && units.every(function (u) { return u === units[0]; }) ? units[0] : 'sf';
+          s.catalog.push(P.normalizeCatalogItem({ subject: subj, code: '', description: subj, scope: '', unit: newUnit, materialRate: null, unitsPerDay: null }));
           S.saveSettings(s);
         }
         ensureQuoteHasItem(subj);
@@ -1104,6 +1110,13 @@
       if (file.size > 600 * 1024) { toast('Please use a logo smaller than 600 KB (it is stored in the browser).', true); t.value = ''; return; }
       S.readDataUrl(file).then(function (url) {
         state.settings.company.logoDataUrl = url;
+        // Wide images are usually a full letterhead; square-ish ones a small mark.
+        var img = new Image();
+        img.onload = function () {
+          state.settings.company.logoLayout = img.naturalWidth / Math.max(1, img.naturalHeight) >= 3 ? 'banner' : 'beside';
+          settingsChanged('full');
+        };
+        img.src = url;
         settingsChanged('full');
       });
     }
