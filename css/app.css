@@ -53,6 +53,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 input.num { text-align: right; }
 input.overridden { background: #fff8d6; }
 input.required { border-color: #c33; background: #fff3f3; }
+input.below { border: 2px solid #c33; box-shadow: 0 0 0 1px #c33; }   /* Total SQ typed below the takeoff */
 input.required::placeholder { color: #c33; }
 textarea { width: 100%; resize: vertical; }
 

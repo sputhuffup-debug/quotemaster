@@ -21,7 +21,10 @@ To run it, double-click `index.html`. To run the tests, double-click `test/tests
 
 1. **Settings** tab: enter your company name, address and logo. Check the catalog and labor rates. Click **Export settings** to keep a backup.
 2. **Import** tab: drop the Bluebeam Markups Summary CSV. Check the subtotal check and the subject mapping.
-3. **Pricing** tab: for each line, fill in the scope of work (**count**, **type** such as ROOMS / AREAS / SOFFITS, and an optional **note** such as "o/ CMU"), then the **material $/sf** and the **install sf/day**. These build labels like "(3) ROOMS @ 8' AFF" or "(7) AREAS @ 10' AFF o/ CMU". Set **Per diem + vehicle** to 0 on local jobs. They start blank, and red fields still need a value. Any other rate or quantity can be adjusted for this quote only; changed fields turn yellow.
+3. **Pricing** tab: for each line, fill in the scope of work (**count**, **type** such as ROOMS / AREAS / SOFFITS, and an optional **note** such as "o/ CMU"), then the **material $/sf** and the **install sf/day**. These build labels like "(3) ROOMS @ 8' AFF" or "(7) AREAS @ 10' AFF o/ CMU". Set **Per diem + vehicle** to 0 on local jobs. These start blank, and red fields still need a value.
+   - **Total SQ** starts as the Waste Sq Ft from Bluebeam, shown alongside for checking. Type your own number in Total SQ; a value below the takeoff gets a **red border**.
+   - **Labor days** can be typed directly for jobs priced by days.
+   - Any other rate or quantity can be adjusted for this quote only; changed fields turn yellow.
 4. **Quote** tab: fill in the GC, project, construction type and notes. Then use **Print proposal** or **Print internal**, and choose **Save as PDF**.
 5. **Save quote** (or Ctrl+S) writes a `.json` file. **Open quote…** re-opens it with its original rates.
 
@@ -86,6 +89,7 @@ revu-quote-builder/
 │   ├── tests.html          # open in browser; runs plain-JS assertions
 │   └── fixtures/
 │       ├── price-list.js     # an Excel-written price list (.xlsx, base64) for the reader tests
+│       ├── vons-1754.csv / .js # real Bluebeam export for golden test 3
 │       ├── mels-drive-in.csv
 │       └── mels-drive-in.js  # same CSV as a JS string; tests.html can't fetch() files on file://
 └── README.md
@@ -146,7 +150,7 @@ This is reverse-engineered from the current Excel template (`Template` sheet, ro
 
 | Field | Excel source | Formula |
 |---|---|---|
-| Total SQ (priced) | `L9` = 2200 (typed in by hand) | `roundUp(sum(Waste Sq Ft), roundTo)`, with `roundTo = 100` *(assumed; confirm)* |
+| Total SQ (priced) | `L9` = 2200 (typed in by hand) | `sum(Waste Sq Ft)` by default; typed in per line when the estimator wants a different number (see below) |
 | Height | `K9` = 8 | Install Height |
 | Lineal Ft | `J9 = ROUNDUP(L9/K9, 0)` | `ceil(totalSq / height)` |
 | **Material (M)** | `H9 = L9 * 2.85` | `totalSq × materialRatePerSf` |
@@ -175,11 +179,16 @@ Labor days are **not** rounded in the current sheet (6.875 days). Make rounding 
   - Entering `0` for units/day means material only, with no labor.
   - Set `rateEntry` to `"catalog"` (Settings → Labor & quantities, or per quote on the Pricing tab) to pre-fill both values from the catalog instead.
   - Quotes saved before this option existed open in catalog mode, so their totals don't change.
-- **Per-quote overrides:** each quote stores a snapshot of the catalog, labor and quantity settings. Any line can override its quantity, height, $/unit or units/day. Blank means automatic.
+- **Total SQ:** starts as the sum of the Waste Sq FT. column, with **no rounding**.
+  - The Pricing tab shows that original basis (**Waste Sq Ft**) next to the editable **Total SQ**, so a typed number can be checked against what Bluebeam measured.
+  - A Total SQ typed **below** the takeoff gets a red border and a warning. It is still allowed, but is likely a typo. The internal take-off marks it "BELOW TAKEOFF"; the GC proposal never shows this.
+  - "Round SF up to" still exists as an option (0 = none). Settings saved while 100 was the default are upgraded to 0.
+- **Labor by days:** a line's Labor days can be typed instead of being calculated from sf/day. Example: the Vons custom Symmetrix line is 9 days × the day rate. Clearing it goes back to sf/day.
+- **Per-quote overrides:** each quote stores a snapshot of the catalog, labor and quantity settings. Any line can override its Total SQ, height, $/unit, units/day or labor days. Blank means automatic.
 - **Scope of work label:** built as `(count) TYPE @ height' AFF note`, matching the Excel sheets: `(3) ROOMS @ 8' AFF`, `(6) AREAS @ 10' AFF`, `(7) AREAS @ 10' AFF o/ CMU`, `(4) SOFFITS @ 2'`.
   - On the Pricing tab each line has a **count**, a **type** (ROOMS, AREAS, WALLS, COLUMNS, SOFFITS, CEILINGS) and an optional **note**.
   - SOFFITS and CEILINGS give a depth rather than a height above the floor, so they omit "AFF". A count of 1 uses the singular, e.g. "(1) ROOM".
-  - **Count:** filled in from the number of distinct Room/Space values in the takeoff. Revu exports often leave that blank, so otherwise it is typed in and flagged until entered.
+  - **Count:** always typed in, and flagged until entered. The takeoff's Room/Space names don't give a reliable count: in the Vons export, one Room ("SALES") held 4 rooms and "PRODUCE" held 9 signs. The names and the markup count are shown as a hint on the count box.
   - **Guesses from the Bluebeam subject:** a subject containing "SOFFIT" starts as SOFFITS (similarly CEILING, COLUMN), and one containing "CMU" gets the note "o/ CMU". Both can be changed.
   - The height comes from the line's install height.
   - The whole label can be typed by hand on the Quote tab (Line descriptions). Clearing it brings back the automatic label.
@@ -206,7 +215,7 @@ window.DEFAULTS = {
   ],
   subjectMap: {},            // remembered Bluebeam Subject -> catalog subject ("__ignore__" = leave off)
   labor: { hourlyRate: 148, hoursPerDay: 8, dailyAdder: 400, dayRounding: "none" },
-  quantity: { source: "wasteSqFt", roundTo: 100, wastePct: 7 },
+  quantity: { source: "wasteSqFt", roundTo: 0, wastePct: 7 },   // 0 = Total SQ is the Waste Sq FT. sum as-is
   rateEntry: "manual",       // "manual" = type material $ and sf/day per quote | "catalog" = pre-fill from catalog
   company: { name: "", address: "", phone: "", email: "", license: "", logoDataUrl: "" },
   terms: { validDays: 30, notes: ["No Spec"], taxPct: 0 },
@@ -220,7 +229,7 @@ window.DEFAULTS = {
 | | Value |
 |---|---|
 | Waste Sq Ft (sum) | 2,184 |
-| Total SQ (rounded up to 100) | 2,200 |
+| Total SQ (typed in; the takeoff basis is 2,184) | 2,200 |
 | Lineal Ft | 275 |
 | Material | 2,200 × 2.85 = **$6,270.00** |
 | Day rate | 148 × 8 + 400 = $1,584.00 |
@@ -237,6 +246,18 @@ window.DEFAULTS = {
 | **Total** | | | | | **$75,861.74** |
 
 This estimate used a $1,184 day rate ($148 × 8, with the per diem + vehicle amount set to 0) and did not round Total SQ to 100. Both are per-quote settings on the Pricing tab.
+
+**Golden test 3: Vons #1754, Fresno** (the real Bluebeam export is `test/fixtures/vons-1754.csv`)
+
+| Scope of work | Waste Sq Ft → Total SQ | Lineal Ft | Material | Labor @ $1,660/day |
+|---|---|---|---|---|
+| (2) ROOMS @ 10' AFF | 1,351 → 1,500 | 150 | 1,500 × $3.60 = $5,400.00 | 1,500 ÷ 180 sf/day = $13,833.33 |
+| (4) ROOMS @ 4' AFF | 2,978 → 3,300 | 825 | labor only ($0) | 3,300 ÷ 150 sf/day = $36,520.00 |
+| (9) CUSTOM SYMMETRIX SIGN @ 6' | 1,576 → 1,580 | 198 (height 8) | labor only ($0) | 9 days entered = $14,940.00 |
+| **Total** | | | | **$70,693.33** |
+
+- The day rate is $140 × 9 hrs + $400 = $1,660.
+- The Symmetrix scope label is typed by hand, and its height is set to 8 (the Mat. Height), so lineal ft = 1,580 ÷ 8.
 
 ---
 
@@ -312,7 +333,7 @@ All six milestones are implemented. `test/tests.html` covers milestones 1 and 2,
 
 ## 9. Open questions
 
-- [ ] **Rounding:** Mel's Drive In rounded 2,184 → 2,200, but Roseville used 1,260 / 2,465 / 128 as-is. Which should be the default? (Now: round up to 100. It can be set per quote on the Pricing tab; 0 = no rounding.)
+- [x] **Rounding:** no automatic rounding. Total SQ defaults to the Waste Sq FT. basis and is typed in per line, with the original shown alongside. Values below the takeoff are flagged in red.
 - [ ] **`SQ. FT` vs length × height:** the Bluebeam values don't exactly equal Measurement × 8 (181.69 × 8 = 1,453.5, but the CSV says 1,469). What formula does the Revu custom column use? Should the app trust it or recompute it?
 - [ ] **`Mat. Height`** (16 and 8 in the sample): is this panel sheet height, and does it affect pricing?
 - [x] **Day rate:** $1,584/day is the all-in labor cost per crew-day: $148/hr × 8 hrs plus $400 for per diem and vehicle use. The UI labels the $400 "Per diem + vehicle". It varies by job: Roseville used $1,184 (no per diem/vehicle). Set it per quote on the Pricing tab.

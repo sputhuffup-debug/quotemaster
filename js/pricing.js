@@ -266,6 +266,8 @@
       line.autoQty = U.roundUp(g.rawQty, roundTo);
       line.qtyOverridden = ov.qty !== undefined && ov.qty !== '' && U.parseNumber(ov.qty) !== null;
       line.qty = line.qtyOverridden ? U.parseNumber(ov.qty) : line.autoQty;
+      // A Total SQ typed below what the takeoff measured is probably a mistake: flag it (not an error).
+      line.qtyBelowTakeoff = line.qtyOverridden && !g.manual && line.qty < g.rawQty - 1e-9;
       line.linealFt = item.unit === 'sf'
         ? (line.height ? Math.ceil(line.qty / line.height - 1e-9) : null)
         : (item.unit === 'lf' ? line.qty : null);
@@ -278,11 +280,17 @@
       line.unitsPerDay = rate('unitsPerDay');
       line.missingRates = [];
       if (line.materialRate === null) line.missingRates.push('material $/' + item.unit);
-      if (line.unitsPerDay === null) line.missingRates.push(item.unit + '/day');
+      // Labor can be entered as a number of days instead (e.g. 9 days for custom work).
+      var daysOv = ov.laborDays !== undefined && ov.laborDays !== '' ? U.parseNumber(ov.laborDays) : null;
+      line.laborDaysOverridden = daysOv !== null && daysOv >= 0;
+      if (line.unitsPerDay === null && !line.laborDaysOverridden) line.missingRates.push(item.unit + '/day');
       line.description = ov.description !== undefined ? ov.description : (item.description || item.subject);
       line.scope = ov.scope !== undefined ? ov.scope : (item.scope || '');
       // Room count: typed on the Pricing tab, else the number of distinct Room/Space values in the takeoff.
-      line.roomsAuto = g.rooms.length || null;
+      // Room/Space names from the takeoff are shown as a hint only: in real exports one Room ("SALES")
+      // can hold 4 rooms or 9 signs, so the count is always typed in.
+      line.roomNames = g.rooms.slice();
+      line.roomsAuto = null;
       line.roomsOverridden = parseRooms(ov.rooms) !== null;
       line.roomCount = line.roomsOverridden ? parseRooms(ov.rooms) : line.roomsAuto;
       line.subject = g.subject || null;
@@ -296,8 +304,9 @@
       // Wall (sf) lines read "(X) ROOMS @ X' AFF"; flag them until the room count is known.
       line.needsRooms = item.unit === 'sf' && line.roomCount === null && !line.scopeLabelOverridden;
       line.dayRate = dr;
-      line.laborDaysRaw = line.unitsPerDay > 0 ? line.qty / line.unitsPerDay : 0;   // 0 sf/day = no labor
-      line.laborDays = U.roundDays(line.laborDaysRaw, rates.labor.dayRounding);
+      line.laborDaysAuto = line.unitsPerDay > 0 ? U.roundDays(line.qty / line.unitsPerDay, rates.labor.dayRounding) : 0;   // 0 sf/day = no labor
+      line.laborDaysRaw = line.laborDaysOverridden ? daysOv : (line.unitsPerDay > 0 ? line.qty / line.unitsPerDay : 0);
+      line.laborDays = line.laborDaysOverridden ? daysOv : line.laborDaysAuto;
       line.material = U.roundMoney(line.qty * (line.materialRate || 0));
       line.labor = U.roundMoney(line.laborDays * dr);
       line.total = U.roundMoney(line.material + line.labor);
@@ -307,6 +316,11 @@
     var totals = { material: 0, labor: 0, laborDays: 0, subtotal: 0, tax: 0, total: 0, taxPct: num(quote.taxPct, 0), linesMissingRates: 0, linesMissingRooms: 0 };
     lines.forEach(function (l) {
       if (l.excluded) return;
+      if (l.qtyBelowTakeoff) {
+        warnings.push({ level: 'warn', code: 'qtybelow', lineKey: l.key,
+          message: (l.scopeLabel || l.catalogSubject) + ' (' + (l.subject || l.catalogSubject) + '): Total SQ ' + U.formatNumber(l.qty, 2) +
+            ' is less than the takeoff ' + U.formatNumber(l.rawQty, 2) + '. Check it is not a typo.' });
+      }
       if (l.needsRooms) {
         totals.linesMissingRooms++;
         warnings.push({ level: 'warn', code: 'needsrooms', lineKey: l.key,

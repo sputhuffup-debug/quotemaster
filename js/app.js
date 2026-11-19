@@ -352,7 +352,7 @@
             options([['none', 'No rounding'], ['half', 'Up to ½ day'], ['whole', 'Up to whole day']], lab.dayRounding) + '</select>') +
           field('SF quantity from', '<select id="r-source" data-q="rates.quantity.source">' +
             options([['wasteSqFt', 'Waste Sq FT. column'], ['sqFt', 'SQ. FT column + waste %'], ['calc', 'Length × Install Ht + waste %']], qty.source) + '</select>') +
-          field('Round SF up to', numInput('r-roundto', qty.roundTo, ' data-q="rates.quantity.roundTo"')) +
+          field('Round SF up to (0 = none)', numInput('r-roundto', qty.roundTo, ' data-q="rates.quantity.roundTo"')) +
           field('Waste % (if not using Waste col.)', numInput('r-waste', qty.wastePct, ' data-q="rates.quantity.wastePct"')) +
           field('Material $ & install rate', '<select id="r-rateentry" data-q="rates.rateEntry">' +
             options([['manual', 'Type in on each line'], ['catalog', 'Pre-fill from catalog']], q.rates.rateEntry || 'manual') + '</select>') +
@@ -372,7 +372,7 @@
         return numInput(id, has ? ov[f] : '', ' data-line="' + esc(l.key) + '" data-ov="' + f + '" placeholder="' + esc(auto) + '"' +
           ' class="num w-xs' + (has ? ' overridden' : '') + '" title="Blank = catalog value ' + esc(auto) + '"');
       }
-      var missing = !has && !l.excluded;
+      var missing = !has && !l.excluded && !(f === 'unitsPerDay' && l.laborDaysOverridden);
       return numInput(id, has ? ov[f] : '', ' data-line="' + esc(l.key) + '" data-ov="' + f + '" placeholder="enter"' +
         ' class="num w-xs' + (missing ? ' required' : '') + '"' +
         ' title="' + (f === 'materialRate' ? 'Material cost per ' + l.unit : 'Installed ' + l.unit + ' per crew-day (0 = no labor)') + '"');
@@ -385,16 +385,23 @@
           ' class="num ' + (cls || '') + (has ? ' overridden' : '') + '" title="Blank = ' + esc(auto) + '"');
       }
       var unitTxt = Q.unitLabel(l.unit).toLowerCase();
+      function qtyInput(l, ov, id) {
+        var has = ov.qty !== undefined && ov.qty !== '';
+        var auto = U.formatNumber(l.autoQty, 2);
+        var title = l.qtyBelowTakeoff
+          ? 'Below the takeoff quantity (' + U.formatNumber(l.rawQty, 2) + '). Check this is not a typo.'
+          : (has ? 'Entered by hand. Clear it to use the takeoff quantity (' + auto + ').' : 'Takeoff quantity. Type a different Total SQ for this quote.');
+        return numInput(id, has ? ov.qty : '', ' data-line="' + esc(l.key) + '" data-ov="qty" placeholder="' + esc(auto) + '"' +
+          ' class="num w-sm' + (has ? ' overridden' : '') + (l.qtyBelowTakeoff ? ' below' : '') + '" title="' + esc(title) + '"');
+      }
       function roomsInput(l, ov, id) {
         var has = ov.rooms !== undefined && ov.rooms !== '';
         var attrs = ' data-line="' + esc(l.key) + '" data-ov="rooms" style="width:56px"';
-        if (l.roomsAuto) {
-          return numInput(id, has ? ov.rooms : '', attrs + ' placeholder="' + l.roomsAuto + '" class="num' + (has ? ' overridden' : '') + '"' +
-            ' title="Blank = ' + l.roomsAuto + ' (rooms named in the takeoff)"');
-        }
         var need = l.needsRooms && !l.excluded;
+        var hint = l.manual ? '' : ' Takeoff: ' + l.rowCount + ' markup' + (l.rowCount === 1 ? '' : 's') +
+          (l.roomNames.length ? ' in ' + l.roomNames.join(', ') : '') + '.';
         return numInput(id, has ? ov.rooms : '', attrs + ' placeholder="' + (need ? '#' : '') + '" class="num' + (need ? ' required' : '') + '"' +
-          ' title="How many rooms / areas / soffits, for the scope of work: (3) ROOMS @ 8\' AFF"');
+          ' title="' + esc('How many rooms / areas / soffits, for the scope of work: (3) ROOMS @ 8\' AFF.' + hint) + '"');
       }
       return '<tr class="' + (l.excluded ? 'excluded' : '') + '">' +
         '<td><input type="checkbox" id="ln-x-' + i + '" data-line="' + esc(l.key) + '" data-ov="excluded"' + (l.excluded ? '' : ' checked') + ' title="Include on quote"></td>' +
@@ -411,11 +418,13 @@
           '<div class="hint">' + esc(l.description) + '</div></td>' +
         '<td>' + (l.unit === 'sf' ? ovInput('height', 'ln-h-' + i, null, l.height !== null ? U.formatFeet(l.height) : '?', 'w-xs') : '') + '</td>' +
         '<td class="num">' + (l.manual ? '—' : U.formatNumber(l.rawQty, 2)) + (anyNonSf ? ' ' + esc(unitTxt) : '') + '</td>' +
-        '<td>' + ovInput('qty', 'ln-q-' + i, null, U.formatNumber(l.autoQty, 2), 'w-sm') + '</td>' +
+        '<td>' + qtyInput(l, ov, 'ln-q-' + i) + '</td>' +
         '<td class="num">' + (l.linealFt !== null ? U.formatNumber(l.linealFt) : '') + '</td>' +
         '<td>' + rateInput(l, ov, 'materialRate', 'ln-mr-' + i) + '</td>' +
         '<td>' + rateInput(l, ov, 'unitsPerDay', 'ln-pd-' + i) + '</td>' +
-        '<td class="num">' + U.formatNumber(l.laborDays, 3) + '</td>' +
+        '<td>' + numInput('ln-days-' + i, l.laborDaysOverridden ? ov.laborDays : '', ' data-line="' + esc(l.key) + '" data-ov="laborDays"' +
+          ' placeholder="' + (l.unitsPerDay === null ? '' : esc(U.formatNumber(l.laborDaysAuto, 3))) + '" class="num w-xs' + (l.laborDaysOverridden ? ' overridden' : '') + '"' +
+          ' title="' + (l.laborDaysOverridden ? 'Labor entered as days. Clear it to use ' + l.unit + '/day instead.' : 'Calculated from ' + l.unit + '/day. Type a number of days to price labor by days instead.') + '"') + '</td>' +
         '<td class="num">' + U.formatMoney(l.material) + '</td>' +
         '<td class="num">' + U.formatMoney(l.labor) + '</td>' +
         '<td class="num strong">' + U.formatMoney(l.total) + '</td>' +
@@ -446,7 +455,7 @@
         messages(warn) +
         empty +
         (lines.length ? '<div class="table-wrap"><table class="data"><thead><tr>' +
-          '<th></th><th>Scope of work <span class="hint">(count · type · note)</span></th><th>Item</th><th>Height</th><th class="num">Takeoff qty</th><th>Priced qty</th><th class="num">Lineal ft</th>' +
+          '<th></th><th>Scope of work <span class="hint">(count · type · note)</span></th><th>Item</th><th>Height</th><th class="num">' + (anyNonSf ? 'Takeoff qty' : 'Waste Sq Ft') + '</th><th>' + (anyNonSf ? 'Priced qty' : 'Total SQ') + '</th><th class="num">Lineal ft</th>' +
           '<th>' + (anyNonSf ? 'Material $ / unit' : 'Material $ / sf') + '</th><th>' + (anyNonSf ? 'Install units / day' : 'Install sf / day') + '</th><th class="num">Labor days</th><th class="num">Material</th><th class="num">Labor</th><th class="num">Total</th><th></th>' +
           '</tr></thead><tbody>' + body + '</tbody>' +
           '<tfoot><tr><td></td><td colspan="8">Totals</td><td class="num">' + U.formatNumber(t.laborDays, 3) + '</td>' +
@@ -677,7 +686,7 @@
           field('Labor cost / day (all-in)', '<input type="text" class="num" readonly tabindex="-1" id="s-dayrate" title="Hourly × hours + per diem & vehicle" value="' + esc(U.formatMoney(P.dayRate(s.labor))) + '">') +
           field('Round labor days', '<select id="s-dayround" data-s="labor.dayRounding">' + options([['none', 'No rounding'], ['half', 'Up to ½ day'], ['whole', 'Up to whole day']], s.labor.dayRounding) + '</select>') +
           field('SF quantity from', '<select id="s-source" data-s="quantity.source">' + options([['wasteSqFt', 'Waste Sq FT. column'], ['sqFt', 'SQ. FT column + waste %'], ['calc', 'Length × Install Ht + waste %']], s.quantity.source) + '</select>') +
-          field('Round SF up to', numInput('s-roundto', s.quantity.roundTo, ' data-s="quantity.roundTo"')) +
+          field('Round SF up to (0 = none)', numInput('s-roundto', s.quantity.roundTo, ' data-s="quantity.roundTo"')) +
           field('Waste %', numInput('s-waste', s.quantity.wastePct, ' data-s="quantity.wastePct"')) +
           field('Material $ & install rate', '<select id="s-rateentry" data-s="rateEntry">' +
             options([['manual', 'Type in on each quote'], ['catalog', 'Pre-fill from catalog']], s.rateEntry || 'manual') + '</select>') +
@@ -841,7 +850,7 @@
   function setLineOverride(key, f, value) {
     var ov = state.quote.lineOverrides[key] || (state.quote.lineOverrides[key] = {});
     // Clearing these fields goes back to the automatic value.
-    var numeric = { qty: 1, height: 1, materialRate: 1, unitsPerDay: 1, rooms: 1, scopeLabel: 1 };
+    var numeric = { qty: 1, height: 1, materialRate: 1, unitsPerDay: 1, rooms: 1, scopeLabel: 1, laborDays: 1 };
     // (scopeNote is NOT cleared on blank: an empty note is a deliberate "no note".)
     if (numeric[f] && String(value).trim() === '') delete ov[f];
     else ov[f] = value;

@@ -23,7 +23,12 @@
 
   /** Fill in anything missing from DEFAULTS and upgrade legacy field names. */
   function normalizeSettings(s) {
+    var fromVersion = s && s.version ? s.version : 1;
     var out = merge(global.DEFAULTS, s || {});
+    // v1 -> v2: quantities are no longer rounded up to 100 by default. Only the old default is changed;
+    // a rounding value someone chose themselves (anything but 100) is kept.
+    if (fromVersion < 2 && out.quantity && +out.quantity.roundTo === 100) out.quantity.roundTo = 0;
+    out.version = global.DEFAULTS.version;
     out.catalog = (out.catalog || []).map(global.Pricing.normalizeCatalogItem);
     if (!Array.isArray(out.terms.notes)) out.terms.notes = String(out.terms.notes || '').split(/\r?\n/).filter(Boolean);
     if (!isPlainObject(out.subjectMap)) out.subjectMap = {};

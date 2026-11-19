@@ -211,14 +211,17 @@
       var detail = [];
       if (!l.manual) {
         detail.push('Takeoff ' + U.formatNumber(l.rawQty, 2) + ' ' + unitLabel(l.unit).toLowerCase() +
-          (l.qtyOverridden ? ' &rarr; overridden to ' : (l.roundTo ? ' &rarr; rounded up to ' + U.formatNumber(l.roundTo) + ' = ' : ' = ')) +
-          U.formatNumber(l.qty, 2) + ' (' + l.rowCount + ' markup' + (l.rowCount === 1 ? '' : 's') + ')');
+          (l.qtyOverridden ? ' &rarr; entered ' : (l.roundTo ? ' &rarr; rounded up to ' + U.formatNumber(l.roundTo) + ' = ' : ' = ')) +
+          U.formatNumber(l.qty, 2) + ' (' + l.rowCount + ' markup' + (l.rowCount === 1 ? '' : 's') + ')' +
+          (l.qtyBelowTakeoff ? ' <strong class="doc-flag">BELOW TAKEOFF</strong>' : ''));
       } else {
         detail.push('Manual line');
       }
       detail.push(l.materialRate === null ? '<strong>Material $/' + l.unit + ' not entered</strong>'
         : 'Material ' + U.formatNumber(l.qty, 2) + ' &times; ' + U.formatMoney(l.materialRate) + '/' + l.unit);
-      if (l.unitsPerDay === null) {
+      if (l.laborDaysOverridden) {
+        detail.push('Labor ' + U.formatNumber(l.laborDays, 3) + ' days (entered) &times; ' + U.formatMoney(l.dayRate) + '/day');
+      } else if (l.unitsPerDay === null) {
         detail.push('<strong>Install ' + l.unit + '/day not entered</strong>');
       } else if (l.unitsPerDay > 0) {
         detail.push('Labor ' + U.formatNumber(l.qty, 2) + ' &divide; ' + U.formatNumber(l.unitsPerDay, 2) + ' ' + l.unit + '/day = ' +
