@@ -33,6 +33,18 @@
 
   var GROUP_RE = /\s*\((\d+)\)\s*$/;
 
+  /**
+   * Unit a takeoff row is measured in, from the CSV itself:
+   *   Measurement Unit "Count"  -> "ea"  (Bluebeam Count tool: Measurement is the number counted)
+   *   Install Height "LF"       -> "lf"  (lineal footage: Measurement is the length in feet)
+   *   otherwise                 -> null  (use the catalog item's unit, normally square feet)
+   */
+  function rowUnit(row) {
+    if (/\bcount\b/i.test(row.measurementUnit || '')) return 'ea';
+    if (/\bLF\b|\blin(eal|ear)?\.?\s*f(oo)?t\b/i.test(row.installHeightText || '')) return 'lf';
+    return null;
+  }
+
   /** "FRP-8' (2)" -> "FRP-8'" */
   function baseSubject(subject) {
     return String(subject || '').replace(GROUP_RE, '').trim();
@@ -134,6 +146,12 @@
         installHeightText: cell(raw, columns.installHeight),
         wasteSqFt: U.parseNumber(cell(raw, columns.wasteSqFt))
       };
+      // "12 ea" / "12 Count" in the Measurement cell itself
+      if (rec.measurement === null) {
+        var mNum = /^\s*([\d,]*\.?\d+)/.exec(cell(raw, columns.measurement));
+        if (mNum) rec.measurement = U.parseNumber(mNum[1]);
+      }
+      rec.rowUnit = rowUnit(rec);
 
       var groupMatch = GROUP_RE.exec(subject);
       var hasPageColumn = columns.pageIndex !== undefined || columns.pageLabel !== undefined;
@@ -193,6 +211,7 @@
   global.Parse = {
     normalizeHeader: normalizeHeader,
     baseSubject: baseSubject,
+    rowUnit: rowUnit,
     mapColumns: mapColumns,
     parseCsvText: parseCsvText,
     parseTable: parseTable,

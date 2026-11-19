@@ -424,6 +424,77 @@
       eq(m.needsRooms, true, 'manual sf line asks for a count');
     });
 
+    group('Pricing — units from the CSV (Count -> EA, LF install height -> LF)');
+    test('row unit detection', function () {
+      eq(Parse.rowUnit({ measurementUnit: 'Count' }), 'ea', 'Count');
+      eq(Parse.rowUnit({ measurementUnit: 'count' }), 'ea', 'lower-case');
+      eq(Parse.rowUnit({ measurementUnit: "ft' in\"", installHeightText: 'LF' }), 'lf', 'LF in Install Height');
+      eq(Parse.rowUnit({ measurementUnit: "ft' in\"", installHeightText: 'lf' }), 'lf', 'lf');
+      eq(Parse.rowUnit({ measurementUnit: "ft' in\"", installHeightText: 'Lin Ft' }), 'lf', 'Lin Ft');
+      eq(Parse.rowUnit({ measurementUnit: "ft' in\"", installHeightText: "10'" }), null, "10' -> catalog unit");
+      eq(Parse.rowUnit({ measurementUnit: 'Count', installHeightText: 'LF' }), 'ea', 'Count wins');
+    });
+    test('Bluebeam export with Count and LF markups', function () {
+      var csv = [
+        'Subject,Room,Color,Space,Page Index,Measurement,Measurement Unit,SQ. FT,Mat. Height,Install Height,Waste Sq FT.',
+        "FRP-8' (1),,,,,100,\"ft' in\"\"\",800,,,856",
+        "FRP-8',,#FFFF00,,16,100,\"ft' in\"\"\",800,8,8',856",
+        'CORNER GUARD (2),,,,,8,Count,,,,',
+        'CORNER GUARD,,#FF0000,,16,5,Count,,,,',
+        'CORNER GUARD,,#FF0000,,17,3,Count,,,,',
+        "PVC CAP (2),,,,,124.35,\"ft' in\"\"\",,,,",
+        "PVC CAP,,#0000FF,,16,80.25,\"ft' in\"\"\",,,LF,",
+        "PVC CAP,,#0000FF,,16,44.1,\"ft' in\"\"\",,,LF,"
+      ].join('\n');
+      var p = Parse.parseCsvText(csv);
+      eq(p.warnings.filter(function (w) { return w.code === 'subtotal'; }).length, 0, 'subtotals match');
+      eq(p.rows.filter(function (r) { return r.rowUnit === 'ea'; }).length, 2, 'count rows flagged EA');
+      eq(p.rows.filter(function (r) { return r.rowUnit === 'lf'; }).length, 2, 'LF rows flagged LF');
+      var s = RqbStorage.normalizeSettings(null);
+      s.rateEntry = 'catalog';
+      s.subjectMap = { 'CORNER GUARD': "FRP-8'", 'PVC CAP': "FRP-8'" };   // mapped to an sf item on purpose
+      var q = Quote.newQuote(s);
+      q.source = { rows: p.rows, subtotals: p.subtotals };
+      var pr = Pricing.price(q, p.rows);
+      var by = {};
+      pr.lines.forEach(function (l) { by[l.subject] = l; });
+      eq(pr.lines.length, 3, 'three lines');
+      eq(by["FRP-8'"].unit, 'sf', 'wall line stays sf');
+      eq(by["FRP-8'"].qty, 856, 'sf from Waste Sq FT.');
+      var cg = by['CORNER GUARD'];
+      eq(cg.unit, 'ea', 'Count -> EA even though the item is sf');
+      eq(cg.qty, 8, 'EA qty = counts (5 + 3), not markups');
+      eq(cg.height, null, 'no height');
+      eq(cg.linealFt, null, 'no lineal ft');
+      eq(cg.scopeLabel, '(8) EA', 'scope label');
+      eq(cg.materialRate, null, '$/sf catalog rate not reused for EA');
+      ok(cg.missingRates.length === 2, 'EA rates must be typed');
+      var cap = by['PVC CAP'];
+      eq(cap.unit, 'lf', 'LF install height -> LF');
+      eq(cap.qty, 124.35, 'LF qty = Measurement (80.25 + 44.1), as measured');
+      eq(cap.linealFt, 124.35, 'lineal ft = qty');
+      eq(cap.scopeLabel, '(2) ROOMS', 'no "@ height AFF" on LF');
+      eq(cap.needsRooms, false, 'LF line not flagged for rooms');
+      q.lineOverrides[cg.key] = { materialRate: '42.50', unitsPerDay: '20' };
+      cg = Pricing.price(q, p.rows).lines.filter(function (l) { return l.key === cg.key; })[0];
+      eq(cg.material, 340, '8 × $42.50');
+      eq(cg.labor, Units.roundMoney(8 / 20 * 1584), 'labor 8 ÷ 20 ea/day');
+      var doc = Quote.render(q, Pricing.price(q, p.rows), s, 'proposal');
+      ok(/8 EA/.test(doc) && /124\.35 LF/.test(doc), 'proposal shows "8 EA" and "124.35 LF"');
+    });
+    test('same subject with sf and LF rows splits into two lines', function () {
+      var p = Parse.parseCsvText("Subject,Page Index,Measurement,Install Height,Waste Sq FT.\nW,1,10,8',80\nW,1,25,LF,\n");
+      var s = RqbStorage.normalizeSettings(null);
+      s.subjectMap = { W: "FRP-8'" };
+      var L = Pricing.price(Quote.newQuote(s), p.rows).lines;
+      eq(L.map(function (l) { return l.unit + ':' + l.qty; }).join(','), 'sf:80,lf:25', 'sf line and LF line');
+    });
+    test('"12 ea" in the Measurement cell', function () {
+      var p = Parse.parseCsvText('Subject,Page Index,Measurement,Measurement Unit\nX,1,12 ea,Count\n');
+      eq(p.rows[0].measurement, 12, 'number read');
+      eq(p.rows[0].rowUnit, 'ea', 'EA');
+    });
+
     group('Pricing — Total SQ vs takeoff');
     test('no rounding by default; typed Total SQ below takeoff is flagged', function () {
       var s = RqbStorage.normalizeSettings(null);
@@ -579,9 +650,9 @@
       var pr = Pricing.price(q, rows);
       var trim = pr.lines.filter(function (l) { return l.catalogSubject === 'Trim'; })[0];
       var corner = pr.lines.filter(function (l) { return l.catalogSubject === 'Corner'; })[0];
-      eq(trim.qty, 16, 'LF rounded up to whole foot');
-      eq(trim.material, 32, 'LF material');
-      eq(trim.labor, Units.roundMoney(16 / 200 * 1584), 'LF labor');
+      eq(trim.qty, 15.3, 'LF used as measured (no rounding)');
+      eq(trim.material, 30.6, 'LF material');
+      eq(trim.labor, Units.roundMoney(15.3 / 200 * 1584), 'LF labor');
       eq(corner.qty, 3, 'EA counts markups');
       eq(corner.labor, 0, 'units/day 0 -> no labor');
       eq(corner.total, 15, 'EA total');

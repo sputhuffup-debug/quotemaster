@@ -174,7 +174,14 @@ Labor days are **not** rounded in the current sheet (6.875 days). Make rounding 
   - `sqFt` uses SQ. FT × (1 + `wastePct`).
   - `calc` uses Measurement × Install Height × (1 + waste).
   - If the chosen column is blank on a row, the next option is used and a note is shown.
-- **Units:** `sf` items price square feet as described above. `lf` items use Measurement (ft), rounded up to whole feet. `ea` items count markups, or use Measurement when the unit is "Count".
+- **Units come from the CSV first:**
+  - **Count** in *Measurement Unit* (the Bluebeam Count tool) → the row is **EA**. Quantity = the counted number, e.g. 5 + 3 = 8, not the number of markups.
+  - **LF** in *Install Height* → the row is **LF**. Quantity = Measurement (feet), used as measured.
+  - Otherwise the catalog item's unit applies (`sf` normally). `sf` quantities come from the Waste Sq FT. column as above.
+  - This holds even when the subject is mapped to a square-foot catalog item. The line becomes EA/LF and that item's $/sf and sf/day are **not** reused, so they must be typed in.
+  - A subject with both wall and LF/EA rows splits into separate lines (walls first).
+  - EA lines get the scope label "(8) EA". LF/EA lines have no height or "AFF". **New catalog item…** on the Import tab picks EA/LF for such subjects.
+  - Catalog `ea` items without Count markups count 1 per markup.
 - **Manual rate entry (`rateEntry: "manual"`, the default):** material $ per unit and install units per day are typed in on each line of each quote. This stays until material costs can come from a database.
   - Until both values are entered, the line is flagged and the total is understated.
   - The Pricing tab shows red fields and an "incomplete" badge, the Quote tab shows a warning, printing asks for confirmation, and the internal take-off prints an INCOMPLETE banner.

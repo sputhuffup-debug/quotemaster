@@ -65,7 +65,15 @@
   }
 
   /** Quantity contributed by one takeoff row, and how it was derived. */
-  function rowQuantity(row, item, qtySettings) {
+  /** Unit a row is priced in: what the CSV says (Count -> EA, Install Height "LF" -> LF), else the catalog item's. */
+  function rowUnit(row, item) {
+    var u = global.Parse && global.Parse.rowUnit ? global.Parse.rowUnit(row) : null;
+    return u || item.unit;
+  }
+
+  function rowQuantity(row, unitOrItem, qtySettings) {
+    var unit = typeof unitOrItem === 'string' ? unitOrItem : unitOrItem.unit;
+    var item = { unit: unit };
     var waste = 1 + num(qtySettings.wastePct, 0) / 100;
     if (item.unit === 'lf') {
       return row.measurement !== null ? { qty: row.measurement, basis: 'measurement' } : { qty: null, basis: 'missing' };
@@ -97,6 +105,7 @@
    */
   var NOUNS = {
     ROOMS: { one: 'ROOM', aff: true },
+    EA: { one: 'EA', aff: false },
     AREAS: { one: 'AREA', aff: true },
     WALLS: { one: 'WALL', aff: true },
     COLUMNS: { one: 'COLUMN', aff: true },
@@ -169,8 +178,9 @@
     var subjectRows = {};     // all detail rows per subject, ticked or not
     var subjectLines = {};    // how many lines each subject is split into
     rows.forEach(function (r) { subjectRows[r.baseSubject] = (subjectRows[r.baseSubject] || 0) + 1; });
-    function groupFor(item, subject, height, room) {
-      var hKey = item.unit === 'sf' ? (height === null ? '?' : String(+height.toFixed(4))) : '';
+    function groupFor(item, unit, subject, height, room) {
+      // sf lines split by height; LF/EA rows of an sf item (from the CSV) get their own line.
+      var hKey = unit === 'sf' ? (height === null ? '?' : String(+height.toFixed(4))) : (unit === item.unit ? '' : unit);
       var roomKey = quote.groupByRoom ? '|' + (room || '') : '';
       var key = subject + '|' + hKey + roomKey;
       if (!groups[key]) {
@@ -179,7 +189,7 @@
         groups[key] = {
           key: key,
           legacyKey: item.subject + '|' + hKey + roomKey,   // key format before per-subject lines
-          item: item, subject: subject, height: item.unit === 'sf' ? height : null,
+          item: item, unit: unit, subject: subject, height: unit === 'sf' ? height : null,
           room: quote.groupByRoom ? (room || '') : null,
           rowIds: [], rooms: [], rawQty: 0, hasQty: false, manual: false
         };
@@ -198,7 +208,8 @@
         return;
       }
       var item = res.item;
-      var q = rowQuantity(row, item, rates.quantity);
+      var unit = rowUnit(row, item);
+      var q = rowQuantity(row, unit, rates.quantity);
       if (q.qty === null) {
         warnings.push({ level: 'warn', code: 'blankqty', rowId: row.id, message: 'Row ' + row.line + ' (' + row.subject + ', page ' + (row.page || '?') + ') has no usable quantity and was not priced.' });
         return;
@@ -206,10 +217,10 @@
       if (q.fallback) {
         warnings.push({ level: 'info', code: 'fallback', rowId: row.id, message: 'Row ' + row.line + ' (' + row.subject + ') has no ' + (rates.quantity.source === 'sqFt' ? 'SQ. FT' : 'Waste Sq FT.') + ' value; used ' + q.basis + ' instead.' });
       }
-      if (item.unit === 'sf' && row.installHeight === null) {
+      if (unit === 'sf' && row.installHeight === null) {
         warnings.push({ level: 'warn', code: 'noheight', rowId: row.id, message: 'Row ' + row.line + ' (' + row.subject + ') has no Install Height.' });
       }
-      var g = groupFor(item, row.baseSubject, row.installHeight, row.room || row.space);
+      var g = groupFor(item, unit, row.baseSubject, row.installHeight, row.room || row.space);
       g.rowIds.push(row.id);
       g.rawQty += q.qty;
       g.hasQty = true;
@@ -226,7 +237,7 @@
       }
       var key = 'manual|' + ml.id;
       groups[key] = {
-        key: key, item: item, height: item.unit === 'sf' ? U.parseFeet(ml.height) : null, room: null,
+        key: key, item: item, unit: item.unit, height: item.unit === 'sf' ? U.parseFeet(ml.height) : null, room: null,
         rowIds: [], rooms: [], rawQty: num(ml.qty, 0), hasQty: true, manual: true, manualId: ml.id
       };
       order.push(key);
@@ -243,6 +254,9 @@
       if (d) return d;
       d = subjectOrder[A.subject] - subjectOrder[B.subject];   // takeoff order within an item
       if (d) return d;
+      var RANK = { sf: 0, lf: 1, ea: 2 };
+      d = (RANK[A.unit] || 0) - (RANK[B.unit] || 0);          // walls, then LF, then EA
+      if (d) return d;
       d = (A.height || 0) - (B.height || 0);
       if (d) return d;
       return String(A.room || '').localeCompare(String(B.room || ''));
@@ -251,6 +265,8 @@
     var lines = order.map(function (key) {
       var g = groups[key];
       var item = g.item;
+      var unit = g.unit || item.unit;
+      var sameUnit = unit === item.unit;   // catalog rates are per the item's unit; don't reuse $/sf for EA
       // Quotes saved before per-subject lines keyed overrides by catalog item; still honour those.
       var ov = overrides[key] || (g.legacyKey && overrides[g.legacyKey]) || {};
       var line = {
@@ -260,39 +276,40 @@
         catalogSubject: item.subject,
         legacyKey: g.legacyKey || null,
         code: item.code || '',
-        unit: item.unit,
+        unit: unit,
+        unitFromCsv: !sameUnit,
         rowIds: g.rowIds,
         rowCount: g.rowIds.length,
         rooms: g.rooms,
         room: g.room,
         excluded: !!ov.excluded
       };
-      line.height = item.unit === 'sf' ? (ov.height !== undefined && ov.height !== '' ? U.parseFeet(ov.height) : g.height) : null;
+      line.height = unit === 'sf' ? (ov.height !== undefined && ov.height !== '' ? U.parseFeet(ov.height) : g.height) : null;
       line.rawQty = g.rawQty;
-      // Manual lines are priced exactly as typed; takeoff lines round up like the Excel sheet.
-      var roundTo = g.manual ? 0 : (item.roundTo !== undefined ? item.roundTo : (item.unit === 'sf' ? num(rates.quantity.roundTo, 0) : 1));
+      // Quantities are used as measured unless a rounding is set (catalog item, or "Round SF up to" for sf).
+      var roundTo = g.manual ? 0 : (sameUnit && item.roundTo !== undefined ? item.roundTo : (unit === 'sf' ? num(rates.quantity.roundTo, 0) : 0));
       line.roundTo = roundTo;
       line.autoQty = U.roundUp(g.rawQty, roundTo);
       line.qtyOverridden = ov.qty !== undefined && ov.qty !== '' && U.parseNumber(ov.qty) !== null;
       line.qty = line.qtyOverridden ? U.parseNumber(ov.qty) : line.autoQty;
       // A Total SQ typed below what the takeoff measured is probably a mistake: flag it (not an error).
       line.qtyBelowTakeoff = line.qtyOverridden && !g.manual && line.qty < g.rawQty - 1e-9;
-      line.linealFt = item.unit === 'sf'
+      line.linealFt = unit === 'sf'
         ? (line.height ? Math.ceil(line.qty / line.height - 1e-9) : null)
-        : (item.unit === 'lf' ? line.qty : null);
+        : (unit === 'lf' ? line.qty : null);
       function rate(f) {
         var v = ov[f] !== undefined && ov[f] !== '' ? U.parseNumber(ov[f]) : null;
         if (v !== null) return v;
-        return manualRates ? null : item[f];
+        return manualRates || !sameUnit ? null : item[f];
       }
       line.materialRate = rate('materialRate');     // null = not entered yet (manual mode)
       line.unitsPerDay = rate('unitsPerDay');
       line.missingRates = [];
-      if (line.materialRate === null) line.missingRates.push('material $/' + item.unit);
+      if (line.materialRate === null) line.missingRates.push('material $/' + unit);
       // Labor can be entered as a number of days instead (e.g. 9 days for custom work).
       var daysOv = ov.laborDays !== undefined && ov.laborDays !== '' ? U.parseNumber(ov.laborDays) : null;
       line.laborDaysOverridden = daysOv !== null && daysOv >= 0;
-      if (line.unitsPerDay === null && !line.laborDaysOverridden) line.missingRates.push(item.unit + '/day');
+      if (line.unitsPerDay === null && !line.laborDaysOverridden) line.missingRates.push(unit + '/day');
       line.description = ov.description !== undefined ? ov.description : (item.description || item.subject);
       line.scope = ov.scope !== undefined ? ov.scope : (item.scope || '');
       // Scope count default: the Bluebeam group count ("(15)") when this line holds all of that subject's
@@ -301,6 +318,8 @@
       line.roomNames = g.rooms.slice();
       if (g.manual || !g.rowIds.length) {
         line.roomsAuto = null; line.roomsSource = null;
+      } else if (unit === 'ea') {
+        line.roomsAuto = Math.round(line.qty) || null; line.roomsSource = 'qty';   // "(12) EA"
       } else if (groupCount[g.subject] && subjectLines[g.subject] === 1 && g.rowIds.length === subjectRows[g.subject]) {
         line.roomsAuto = groupCount[g.subject]; line.roomsSource = 'group';
       } else {
@@ -309,7 +328,7 @@
       line.roomsOverridden = parseRooms(ov.rooms) !== null;
       line.roomCount = line.roomsOverridden ? parseRooms(ov.rooms) : line.roomsAuto;
       line.subject = g.subject || null;
-      line.roomNounAuto = guessNoun(g.subject || item.subject);
+      line.roomNounAuto = unit === 'ea' ? 'EA' : guessNoun(g.subject || item.subject);
       line.roomNoun = ov.roomNoun ? String(ov.roomNoun).toUpperCase() : line.roomNounAuto;
       line.scopeNoteAuto = guessNote(g.subject || item.subject);
       line.scopeNote = ov.scopeNote !== undefined ? String(ov.scopeNote).trim() : line.scopeNoteAuto;
@@ -317,7 +336,7 @@
       line.scopeLabelOverridden = ov.scopeLabel !== undefined;
       line.scopeLabel = line.scopeLabelOverridden ? ov.scopeLabel : line.scopeLabelAuto;
       // Wall (sf) lines read "(X) ROOMS @ X' AFF"; flag them until the room count is known.
-      line.needsRooms = item.unit === 'sf' && line.roomCount === null && !line.scopeLabelOverridden;
+      line.needsRooms = unit === 'sf' && line.roomCount === null && !line.scopeLabelOverridden;
       line.dayRate = dr;
       line.laborDaysAuto = line.unitsPerDay > 0 ? U.roundDays(line.qty / line.unitsPerDay, rates.labor.dayRounding) : 0;   // 0 sf/day = no labor
       line.laborDaysRaw = line.laborDaysOverridden ? daysOv : (line.unitsPerDay > 0 ? line.qty / line.unitsPerDay : 0);
@@ -376,6 +395,7 @@
     price: price,
     dayRate: dayRate,
     rowQuantity: rowQuantity,
+    rowUnit: rowUnit,
     resolveSubject: resolveSubject,
     findCatalogItem: findCatalogItem,
     normalizeCatalogItem: normalizeCatalogItem

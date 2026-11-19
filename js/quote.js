@@ -241,7 +241,7 @@
         '<tr>' +
           '<td class="doc-scope-label">' + scopeLabelHtml(l.scopeLabel) + '</td>' +
           '<td>' + esc(l.description) + (l.code ? '<div class="doc-code">' + esc(l.code) + '</div>' : '') + '</td>' +
-          '<td class="num">' + (l.linealFt !== null ? U.formatNumber(l.linealFt) : '') + '</td>' +
+          '<td class="num">' + (l.linealFt !== null ? U.formatNumber(l.linealFt, l.unit === 'lf' ? 2 : 0) : '') + '</td>' +
           '<td class="num">' + (l.height ? esc(U.formatFeet(l.height)) : '') + '</td>' +
           '<td class="num">' + qtyCell(l) + '</td>' +
           '<td class="num">' + U.formatMoney(l.material) + '</td>' +
@@ -328,7 +328,7 @@
     var body = lines.map(function (l) {
       var r = '<tr><td class="doc-scope-label">' + scopeLabelHtml(l.scopeLabel) + '</td><td>' + esc(l.description) + '</td>';
       if (showQty) {
-        r += '<td class="num">' + (l.linealFt !== null ? U.formatNumber(l.linealFt) : '') + '</td>' +
+        r += '<td class="num">' + (l.linealFt !== null ? U.formatNumber(l.linealFt, l.unit === 'lf' ? 2 : 0) : '') + '</td>' +
           '<td class="num">' + (l.height ? esc(U.formatFeet(l.height)) : '') + '</td>' +
           '<td class="num">' + qtyCell(l) + '</td>';
       }

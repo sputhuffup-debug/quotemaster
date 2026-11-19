@@ -282,7 +282,7 @@
         '<td>' + esc(r.room || r.space) + '</td>' +
         '<td class="num">' + esc(r.page) + '</td>' +
         '<td>' + esc(r.label || r.comments) + '</td>' +
-        '<td class="num">' + U.formatNumber(r.measurement, 4) + '</td>' +
+        '<td class="num">' + U.formatNumber(r.measurement, 4) + (r.rowUnit === 'ea' ? ' ea' : (r.rowUnit === 'lf' ? ' lf' : '')) + '</td>' +
         '<td class="num">' + esc(r.installHeightText) + '</td>' +
         '<td class="num">' + (r.matHeight !== null ? U.formatNumber(r.matHeight, 2) : '') + '</td>' +
         '<td class="num">' + U.formatNumber(r.sqFt, 2) + '</td>' +
@@ -425,7 +425,7 @@
         '<td>' + (l.unit === 'sf' ? ovInput('height', 'ln-h-' + i, null, l.height !== null ? U.formatFeet(l.height) : '?', 'w-xs') : '') + '</td>' +
         '<td class="num">' + (l.manual ? '—' : U.formatNumber(l.rawQty, 2)) + (anyNonSf ? ' ' + esc(unitTxt) : '') + '</td>' +
         '<td>' + qtyInput(l, ov, 'ln-q-' + i) + '</td>' +
-        '<td class="num">' + (l.linealFt !== null ? U.formatNumber(l.linealFt) : '') + '</td>' +
+        '<td class="num">' + (l.linealFt !== null ? U.formatNumber(l.linealFt, l.unit === 'lf' ? 2 : 0) : '') + '</td>' +
         '<td>' + rateInput(l, ov, 'materialRate', 'ln-mr-' + i) + '</td>' +
         '<td>' + rateInput(l, ov, 'unitsPerDay', 'ln-pd-' + i) + '</td>' +
         '<td>' + numInput('ln-days-' + i, l.laborDaysOverridden ? ov.laborDays : '', ' data-line="' + esc(l.key) + '" data-ov="laborDays"' +
@@ -952,7 +952,10 @@
       case 'new-cat': {
         var subj = b.dataset.subject;
         if (!P.findCatalogItem(s.catalog, subj)) {
-          s.catalog.push(P.normalizeCatalogItem({ subject: subj, code: '', description: subj, scope: '', unit: 'sf', materialRate: 0, unitsPerDay: 0 }));
+          // Count markups -> EA item, "LF" install height -> LF item, else square feet.
+          var units = rows().filter(function (r) { return r.baseSubject === subj; }).map(function (r) { return global.Parse.rowUnit(r) || 'sf'; });
+          var newUnit = units.length && units.every(function (u) { return u === units[0]; }) ? units[0] : 'sf';
+          s.catalog.push(P.normalizeCatalogItem({ subject: subj, code: '', description: subj, scope: '', unit: newUnit, materialRate: null, unitsPerDay: null }));
           S.saveSettings(s);
         }
         ensureQuoteHasItem(subj);
