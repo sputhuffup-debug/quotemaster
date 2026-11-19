@@ -268,6 +268,8 @@ window.DEFAULTS = {
 
 This estimate used a $1,184 day rate ($148 × 8, with the per diem + vehicle amount set to 0) and did not round Total SQ to 100. Both are per-quote settings on the Pricing tab.
 
+The $148/hr on this sheet was a mistake: Roseville is a **Local** job at **$140/hr**. The test reproduces the sheet's arithmetic above to check the formulas, then checks the corrected price at $1,120/day: labor $6,414.55 / $13,804.00 / $1,792.00, **total $74,604.00**. The app prices Roseville at $140/hr by default.
+
 **Golden test 3: Vons #1754, Fresno** (the real Bluebeam export is `test/fixtures/vons-1754.csv`)
 
 | Scope of work | Waste Sq Ft → Total SQ | Lineal Ft | Material | Labor @ $1,660/day |
@@ -366,7 +368,7 @@ All six milestones are implemented. `test/tests.html` covers milestones 1 and 2,
 - [ ] **`SQ. FT` vs length × height:** the Bluebeam values don't exactly equal Measurement × 8 (181.69 × 8 = 1,453.5, but the CSV says 1,469). What formula does the Revu custom column use? Should the app trust it or recompute it?
 - [ ] **`Mat. Height`** (16 and 8 in the sample): is this panel sheet height, and does it affect pricing?
 - [x] **Day rate:** $1,584/day is the all-in labor cost per crew-day: $148/hr × 8 hrs plus $400 for per diem and vehicle use. The UI labels the $400 "Per diem + vehicle". It varies by job: Roseville used $1,184 (no per diem/vehicle). Set it per quote on the Pricing tab.
-- [x] **Union rates:** Local $140/hr, Bay Area $148/hr (2026), picked from the project city. Note that the Roseville sheet (a Local city) was priced at $148/hr.
+- [x] **Union rates:** Local $140/hr, Bay Area $148/hr (2026), picked from the project city. The Roseville sheet's $148/hr was a mistake; Local $140/hr is correct.
 - [x] **Material $ and sf/day:** entered by hand on each quote for now. Material costs will come from an Excel price list (~150 items); the import is built (§4.4). Next step: build the real price list and switch to "Pre-fill from catalog".
 - [ ] **Labor production:** is 320 sf/day still the usual figure? Is the day rate the same on every job? (It can be changed per quote on the Pricing tab.)
 - [ ] **GC proposal:** show the material/labor split, or a lump sum only? Is tax included or excluded?
