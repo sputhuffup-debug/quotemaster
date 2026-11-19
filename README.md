@@ -21,7 +21,7 @@ To run it, double-click `index.html`. To run the tests, double-click `test/tests
 
 1. **Settings** tab: enter your company name, address and logo. Check the catalog and labor rates. Click **Export settings** to keep a backup.
 2. **Import** tab: drop the Bluebeam Markups Summary CSV. Check the subtotal check and the subject mapping.
-3. **Pricing** tab: type the **number of rooms**, the **material $/sf** and the **install sf/day** for each line. The room count builds the scope of work, e.g. "(3) ROOMS @ 8' AFF". They start blank, and red fields still need a value. Any other rate or quantity can be adjusted for this quote only; changed fields turn yellow.
+3. **Pricing** tab: for each line, fill in the scope of work (**count**, **type** such as ROOMS / AREAS / SOFFITS, and an optional **note** such as "o/ CMU"), then the **material $/sf** and the **install sf/day**. These build labels like "(3) ROOMS @ 8' AFF" or "(7) AREAS @ 10' AFF o/ CMU". Set **Per diem + vehicle** to 0 on local jobs. They start blank, and red fields still need a value. Any other rate or quantity can be adjusted for this quote only; changed fields turn yellow.
 4. **Quote** tab: fill in the GC, project, construction type and notes. Then use **Print proposal** or **Print internal**, and choose **Save as PDF**.
 5. **Save quote** (or Ctrl+S) writes a `.json` file. **Open quote…** re-opens it with its original rates.
 
@@ -35,7 +35,7 @@ These use the Mel's Drive In sample takeoff (`test/fixtures/mels-drive-in.csv`) 
 
 ![Import tab](docs/screenshots/1-import.png)
 
-**2. Pricing:** room count, material $/sf and install sf/day are typed in per line. Labor comes from sf ÷ sf/day × $1,584/day.
+**2. Pricing:** scope of work (count, type, note), material $/sf and install sf/day are typed in per line. Labor comes from sf ÷ sf/day × $1,584/day.
 
 ![Pricing tab](docs/screenshots/2-pricing.png)
 
@@ -158,7 +158,11 @@ Labor days are **not** rounded in the current sheet (6.875 days). Make rounding 
 
 **Implementation notes**
 
-- **Line grouping:** takeoff rows are grouped into one line per *catalog item × install height*. A different height gives a separate line, because Lineal Ft = SQ ÷ height needs a single height. The optional "Separate line per room" setting also splits lines by room.
+- **Line grouping:** takeoff rows are grouped into one line per *Bluebeam subject × install height*.
+  - Two subjects priced as the same catalog item stay separate lines, so they can have different production rates. Example: `FRP-10'` and `FRP-10' CMU` are the same material, but CMU walls install slower.
+  - A different height also gives a separate line, because Lineal Ft = SQ ÷ height needs a single height.
+  - The optional "Separate line per room" setting also splits lines by room.
+  - Quotes saved before this change keyed their line overrides by catalog item; those are still picked up.
 - **Quantity source** (`quantity.source`):
   - `wasteSqFt` (default) uses the Waste Sq FT. column.
   - `sqFt` uses SQ. FT × (1 + `wastePct`).
@@ -172,10 +176,14 @@ Labor days are **not** rounded in the current sheet (6.875 days). Make rounding 
   - Set `rateEntry` to `"catalog"` (Settings → Labor & quantities, or per quote on the Pricing tab) to pre-fill both values from the catalog instead.
   - Quotes saved before this option existed open in catalog mode, so their totals don't change.
 - **Per-quote overrides:** each quote stores a snapshot of the catalog, labor and quantity settings. Any line can override its quantity, height, $/unit or units/day. Blank means automatic.
-- **Scope of work label:** each wall (sf) line reads `(X) ROOMS @ X' AFF`, matching the Excel sheet.
-  - The room count is filled in from the number of distinct Room/Space values in the takeoff. Revu exports often leave that blank, so otherwise it is typed in the Rooms column on the Pricing tab and flagged until entered.
+- **Scope of work label:** built as `(count) TYPE @ height' AFF note`, matching the Excel sheets: `(3) ROOMS @ 8' AFF`, `(6) AREAS @ 10' AFF`, `(7) AREAS @ 10' AFF o/ CMU`, `(4) SOFFITS @ 2'`.
+  - On the Pricing tab each line has a **count**, a **type** (ROOMS, AREAS, WALLS, COLUMNS, SOFFITS, CEILINGS) and an optional **note**.
+  - SOFFITS and CEILINGS give a depth rather than a height above the floor, so they omit "AFF". A count of 1 uses the singular, e.g. "(1) ROOM".
+  - **Count:** filled in from the number of distinct Room/Space values in the takeoff. Revu exports often leave that blank, so otherwise it is typed in and flagged until entered.
+  - **Guesses from the Bluebeam subject:** a subject containing "SOFFIT" starts as SOFFITS (similarly CEILING, COLUMN), and one containing "CMU" gets the note "o/ CMU". Both can be changed.
   - The height comes from the line's install height.
-  - The label can also be typed over by hand. Clearing it brings back the automatic label.
+  - The whole label can be typed by hand on the Quote tab (Line descriptions). Clearing it brings back the automatic label.
+  - On printouts the label only wraps between its parts, never inside "@ 10' AFF".
 - **Manual lines** can be added for items that aren't in the takeoff. They are priced at the quantity typed, with no rounding.
 - **Sales tax:** an optional % on material (`terms.taxPct`, default 0). The tax line is only shown when it is non-zero.
 - Money is rounded to the cent per line. Totals are the sum of the line totals.
@@ -218,6 +226,17 @@ window.DEFAULTS = {
 | Day rate | 148 × 8 + 400 = $1,584.00 |
 | Labor | 2,200 / 320 × 1,584 = **$10,890.00** |
 | **Total** | **$17,160.00** |
+
+**Golden test 2: Roseville Aquatics Complex - Alteration** (three lines of the same material, from a second in-house estimate)
+
+| Scope of work | Total SQ | Lineal Ft | Material @ $13.65 | sf/day | Labor @ $1,184/day |
+|---|---|---|---|---|---|
+| (6) AREAS @ 10' AFF | 1,260 | 126 | $17,199.00 | 220 | $6,781.09 |
+| (7) AREAS @ 10' AFF o/ CMU | 2,465 | 247 | $33,647.25 | 200 | $14,592.80 |
+| (4) SOFFITS @ 2' | 128 | 64 | $1,747.20 | 80 | $1,894.40 |
+| **Total** | | | | | **$75,861.74** |
+
+This estimate used a $1,184 day rate ($148 × 8, with the per diem + vehicle amount set to 0) and did not round Total SQ to 100. Both are per-quote settings on the Pricing tab.
 
 ---
 
@@ -293,10 +312,10 @@ All six milestones are implemented. `test/tests.html` covers milestones 1 and 2,
 
 ## 9. Open questions
 
-- [ ] **Rounding:** is "Total SQ" always the Waste Sq Ft rounded **up to the nearest 100**?
+- [ ] **Rounding:** Mel's Drive In rounded 2,184 → 2,200, but Roseville used 1,260 / 2,465 / 128 as-is. Which should be the default? (Now: round up to 100. It can be set per quote on the Pricing tab; 0 = no rounding.)
 - [ ] **`SQ. FT` vs length × height:** the Bluebeam values don't exactly equal Measurement × 8 (181.69 × 8 = 1,453.5, but the CSV says 1,469). What formula does the Revu custom column use? Should the app trust it or recompute it?
 - [ ] **`Mat. Height`** (16 and 8 in the sample): is this panel sheet height, and does it affect pricing?
-- [x] **Day rate:** $1,584/day is the all-in labor cost per crew-day: $148/hr × 8 hrs plus $400 for per diem and vehicle use. The UI labels the $400 "Per diem + vehicle".
+- [x] **Day rate:** $1,584/day is the all-in labor cost per crew-day: $148/hr × 8 hrs plus $400 for per diem and vehicle use. The UI labels the $400 "Per diem + vehicle". It varies by job: Roseville used $1,184 (no per diem/vehicle). Set it per quote on the Pricing tab.
 - [x] **Material $ and sf/day:** entered by hand on each quote for now. Material costs will come from an Excel price list (~150 items); the import is built (§4.4). Next step: build the real price list and switch to "Pre-fill from catalog".
 - [ ] **Labor production:** is 320 sf/day still the usual figure? Is the day rate the same on every job? (It can be changed per quote on the Pricing tab.)
 - [ ] **GC proposal:** show the material/labor split, or a lump sum only? Is tax included or excluded?

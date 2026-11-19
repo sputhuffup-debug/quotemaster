@@ -188,3 +188,10 @@ table.data td.item-cell { min-width: 220px; }
   .quote-layout { display: grid; grid-template-columns: minmax(420px, 1fr) auto; gap: 16px; align-items: start; }
   .quote-layout > .card:last-child { grid-column: 2; grid-row: 1 / span 20; position: sticky; top: 12px; }
 }
+
+/* Pricing: scope-of-work count / type / note, with the printed label underneath */
+.scope-cell { min-width: 230px; }
+.scope-edit { display: flex; gap: 4px; align-items: center; }
+.scope-edit select { width: auto !important; padding: 5px 4px; }
+.scope-preview { font-size: 12px; font-weight: 600; margin-top: 3px; white-space: nowrap; }
+.scope-preview.typed { color: #7a5200; }
