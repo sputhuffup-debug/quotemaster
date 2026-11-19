@@ -281,7 +281,7 @@
       var q = newQ(s);
       ["FRP-10'", "FRP-10' CMU", 'FRP-SOFFIT'].forEach(function (subj) { q.rates.subjectMap[subj] = 'FRP-A-VARIETEX'; });
       q.project.address = '3051 Woodcreek Oaks Blvd, Roseville CA, 95747';   // Local area ...
-      q.rates.labor.hourlyRate = '148';   // ... but that sheet was priced at $148/hr
+      q.rates.labor.hourlyRate = '148';   // ... the sheet used $148/hr by mistake; reproduce it to check the formulas
       q.rates.labor.dailyAdder = 0;
       q.rates.quantity.roundTo = 0;
       var rows = Parse.parseCsvText([
@@ -307,7 +307,16 @@
       eq(L[0].material, 17199, 'M $17,199.00'); eq(L[0].labor, 6781.09, 'L $6,781.09');
       eq(L[1].material, 33647.25, 'M $33,647.25'); eq(L[1].labor, 14592.8, 'L $14,592.80');
       eq(L[2].material, 1747.2, 'M $1,747.20'); eq(L[2].labor, 1894.4, 'L $1,894.40');
-      eq(pr.totals.total, 75861.74, 'Total $75,861.74');
+      eq(pr.totals.total, 75861.74, 'Total $75,861.74 (as on the sheet)');
+      // At the correct Local rate ($140/hr, the default for Roseville): $1,120/day.
+      q.rates.labor.hourlyRate = DEFAULTS.labor.hourlyRate;
+      var fixed = Pricing.price(q, rows);
+      eq(fixed.laborArea.zone, 'local', 'Roseville is Local');
+      eq(fixed.dayRate, 1120, 'day rate $1,120');
+      eq(fixed.lines.map(function (l) { return l.labor; }).join(','), '6414.55,13804,1792', 'labor $6,414.55 / $13,804.00 / $1,792.00');
+      eq(fixed.totals.total, 74604, 'correct total $74,604.00');
+      q.rates.labor.hourlyRate = '148';
+      pr = Pricing.price(q, rows);
       eq(pr.totals.linesMissingRates + pr.totals.linesMissingRooms, 0, 'nothing flagged');
       var doc = Quote.render(q, pr, s, 'proposal').replace(/&nbsp;/g, ' ');
       ok(/\(7\) AREAS @ 10&#39; AFF o\/ CMU/.test(doc), 'proposal prints the CMU label');
