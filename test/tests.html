@@ -256,6 +256,97 @@
       eq(Pricing.price(q, q.source.rows).totals.total, 17160, 'same total as when saved');
     });
 
+    group('Pricing — golden test 2 (Roseville Aquatics Complex estimate)');
+    test('three lines, same material, different production rates', function () {
+      // Reconstructed from the in-house estimate: $13.65/sf material; 220 / 200 (o/ CMU) / 80 (soffits) sf/day;
+      // day rate $1,184 (148 × 8, no per diem / vehicle); Total SQ not rounded.
+      var s = RqbStorage.normalizeSettings(null);   // manual rate entry (the default)
+      s.catalog.push(Pricing.normalizeCatalogItem({
+        subject: 'FRP-A-VARIETEX', description: 'FRP-CLASS A VALTO VARIETEX LINEN SILHOUETTE TRIM',
+        scope: 'FURNISH AND INSTALL CLASS A VALTO VARIETEX FRP WITH PVC TRIM AT ALL EDGES AND SEAMS', unit: 'sf' }));
+      var q = Quote.newQuote(s);
+      ["FRP-10'", "FRP-10' CMU", 'FRP-SOFFIT'].forEach(function (subj) { q.rates.subjectMap[subj] = 'FRP-A-VARIETEX'; });
+      q.rates.labor.dailyAdder = 0;
+      q.rates.quantity.roundTo = 0;
+      var rows = Parse.parseCsvText([
+        'Subject,Page Index,Measurement,Install Height,Waste Sq FT.',
+        "FRP-10',2,70,10',700", "FRP-10',3,56,10',560",
+        "FRP-10' CMU,2,120,10',1200", "FRP-10' CMU,4,126.5,10',1265",
+        'FRP-SOFFIT,5,64,2\',128'].join('\n')).rows;
+      var pr = Pricing.price(q, rows);
+      eq(pr.lines.length, 3, 'three lines (same catalog item, separate Bluebeam subjects)');
+      var setup = [{ rooms: 6, noun: 'AREAS', pd: 220 }, { rooms: 7, noun: 'AREAS', pd: 200 }, { rooms: 4, pd: 80 }];
+      pr.lines.forEach(function (l, i) {
+        q.lineOverrides[l.key] = { rooms: String(setup[i].rooms), materialRate: '13.65', unitsPerDay: String(setup[i].pd) };
+        if (setup[i].noun) q.lineOverrides[l.key].roomNoun = setup[i].noun;
+      });
+      pr = Pricing.price(q, rows);
+      var L = pr.lines;
+      eq(pr.dayRate, 1184, 'day rate $1,184');
+      eq(L[0].scopeLabel, "(6) AREAS @ 10' AFF", 'line 1 label');
+      eq(L[1].scopeLabel, "(7) AREAS @ 10' AFF o/ CMU", 'line 2 label (o/ CMU from the subject)');
+      eq(L[2].scopeLabel, "(4) SOFFITS @ 2'", 'line 3 label (soffits: no AFF)');
+      eq(L[0].qty, 1260, 'Total SQ 1260'); eq(L[1].qty, 2465, 'Total SQ 2465'); eq(L[2].qty, 128, 'Total SQ 128');
+      eq(L[0].linealFt, 126, 'Lineal 126'); eq(L[1].linealFt, 247, 'Lineal 247'); eq(L[2].linealFt, 64, 'Lineal 64');
+      eq(L[0].material, 17199, 'M $17,199.00'); eq(L[0].labor, 6781.09, 'L $6,781.09');
+      eq(L[1].material, 33647.25, 'M $33,647.25'); eq(L[1].labor, 14592.8, 'L $14,592.80');
+      eq(L[2].material, 1747.2, 'M $1,747.20'); eq(L[2].labor, 1894.4, 'L $1,894.40');
+      eq(pr.totals.total, 75861.74, 'Total $75,861.74');
+      eq(pr.totals.linesMissingRates + pr.totals.linesMissingRooms, 0, 'nothing flagged');
+      var doc = Quote.render(q, pr, s, 'proposal').replace(/&nbsp;/g, ' ');
+      ok(/\(7\) AREAS @ 10&#39; AFF o\/ CMU/.test(doc), 'proposal prints the CMU label');
+      ok(/\(7\)&nbsp;AREAS @&nbsp;10&#39;&nbsp;AFF o\/&nbsp;CMU/.test(Quote.render(q, pr, s, 'proposal')), 'label wraps only between chunks');
+      eq((doc.match(/FURNISH AND INSTALL CLASS A VALTO/g) || []).length, 1, 'shared scope paragraph printed once');
+    });
+
+    group('Pricing — scope label and line grouping');
+    test('nouns, notes and AFF', function () {
+      var s = freshSettings();
+      var q = Quote.newQuote(s);
+      var key = Pricing.price(q, fixture().rows).lines[0].key;
+      q.lineOverrides[key] = { rooms: '2', roomNoun: 'walls', scopeNote: 'BOH' };
+      eq(Pricing.price(q, fixture().rows).lines[0].scopeLabel, "(2) WALLS @ 8' AFF BOH", 'noun upper-cased, note appended');
+      q.lineOverrides[key] = { rooms: '1', roomNoun: 'CEILINGS' };
+      eq(Pricing.price(q, fixture().rows).lines[0].scopeLabel, "(1) CEILING @ 8'", 'singular overhead noun, no AFF');
+      q.lineOverrides[key] = { rooms: '3', scopeNote: '' };
+      eq(Pricing.price(q, fixture().rows).lines[0].scopeLabel, "(3) ROOMS @ 8' AFF", 'blank note');
+    });
+    test('guesses from the Bluebeam subject', function () {
+      var s = freshSettings();
+      s.subjectMap = { 'FRP SOFFIT': "FRP-8'", "FRP-8' CMU": "FRP-8'" };
+      var q = Quote.newQuote(s);
+      var rows = Parse.parseCsvText("Subject,Page Index,Install Height,Waste Sq FT.\nFRP SOFFIT,1,2',50\nFRP-8' CMU,1,8',100\n").rows;
+      var L = Pricing.price(q, rows).lines;
+      var soffit = L.filter(function (l) { return l.subject === 'FRP SOFFIT'; })[0];
+      var cmu = L.filter(function (l) { return l.subject === "FRP-8' CMU"; })[0];
+      eq(soffit.roomNoun, 'SOFFITS', 'soffit subject -> SOFFITS');
+      eq(soffit.scopeLabel, "@ 2'", 'no AFF before the count is known');
+      eq(cmu.scopeNote, 'o/ CMU', 'CMU subject -> o/ CMU');
+      q.lineOverrides[cmu.key] = { scopeNote: '' };
+      eq(Pricing.price(q, rows).lines.filter(function (l) { return l.key === cmu.key; })[0].scopeNote, '', 'guess can be cleared');
+    });
+    test('two subjects, same item, same height -> two lines', function () {
+      var s = freshSettings();
+      s.subjectMap = { 'Kitchen FRP': "FRP-8'", 'Restroom FRP': "FRP-8'" };
+      var q = Quote.newQuote(s);
+      var rows = Parse.parseCsvText("Subject,Page Index,Install Height,Waste Sq FT.\nRestroom FRP,1,8',100\nKitchen FRP,1,8',200\nRestroom FRP,2,8',50\n").rows;
+      var L = Pricing.price(q, rows).lines;
+      eq(L.length, 2, 'two lines');
+      eq(L[0].subject, 'Restroom FRP', 'takeoff order kept');
+      eq(L[0].rawQty, 150, 'rows of the same subject combined');
+    });
+    test('overrides saved under the old line keys still apply', function () {
+      var s = RqbStorage.normalizeSettings(null);
+      s.subjectMap = { 'Wall A': "FRP-8'" };
+      var q = Quote.newQuote(s);
+      q.lineOverrides["FRP-8'|8"] = { materialRate: '2.85', unitsPerDay: '320' };   // pre-change key format
+      var rows = Parse.parseCsvText("Subject,Page Index,Install Height,Waste Sq FT.\nWall A,1,8',2184\n").rows;
+      var l = Pricing.price(q, rows).lines[0];
+      eq(l.key, "Wall A|8", 'new key');
+      eq(l.legacyKey, "FRP-8'|8", 'old key known');
+      eq(l.total, 17160, 'typed rates found via the old key');
+    });
+
     group('Pricing — options and overrides');
     test('day rounding', function () {
       var s = freshSettings();

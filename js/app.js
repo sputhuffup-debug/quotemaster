@@ -82,7 +82,15 @@
 
   function rows() { return state.quote.source ? state.quote.source.rows : []; }
 
-  function recompute() { state.priced = P.price(state.quote, rows()); }
+  function recompute() {
+    state.priced = P.price(state.quote, rows());
+    // Quotes saved before lines were split per Bluebeam subject keyed overrides by catalog item:
+    // copy them to the new line keys so edits keep the typed rates.
+    var ovs = state.quote.lineOverrides;
+    state.priced.lines.forEach(function (l) {
+      if (l.legacyKey && l.legacyKey !== l.key && !ovs[l.key] && ovs[l.legacyKey]) ovs[l.key] = JSON.parse(JSON.stringify(ovs[l.legacyKey]));
+    });
+  }
 
   function saveDraft() {
     S.saveDraft({ quote: state.quote, dirty: state.dirty, tab: state.tab, previewMode: state.previewMode });
@@ -386,15 +394,19 @@
         }
         var need = l.needsRooms && !l.excluded;
         return numInput(id, has ? ov.rooms : '', attrs + ' placeholder="' + (need ? '#' : '') + '" class="num' + (need ? ' required' : '') + '"' +
-          ' title="Number of rooms, for the scope of work: (3) ROOMS @ 8\' AFF"');
+          ' title="How many rooms / areas / soffits, for the scope of work: (3) ROOMS @ 8\' AFF"');
       }
       return '<tr class="' + (l.excluded ? 'excluded' : '') + '">' +
         '<td><input type="checkbox" id="ln-x-' + i + '" data-line="' + esc(l.key) + '" data-ov="excluded"' + (l.excluded ? '' : ' checked') + ' title="Include on quote"></td>' +
-        '<td>' + roomsInput(l, ov, 'ln-rooms-' + i) + '</td>' +
-        '<td>' + textInput('ln-label-' + i, l.scopeLabelOverridden ? l.scopeLabel : '', ' data-line="' + esc(l.key) + '" data-ov="scopeLabel" placeholder="' + esc(l.scopeLabelAuto) + '"' +
-          (l.scopeLabelOverridden ? ' class="overridden" title="Typed by hand; clear it to go back to the automatic label"' : ' title="Automatic: (rooms) ROOMS @ height AFF. Type here to replace it."') +
-          ' style="min-width:170px"') + '</td>' +
+        '<td class="scope-cell"><div class="scope-edit">' + roomsInput(l, ov, 'ln-rooms-' + i) +
+          '<select id="ln-noun-' + i + '" data-line="' + esc(l.key) + '" data-ov="roomNoun" title="What is being counted">' +
+            options(Object.keys(P.NOUNS).map(function (n) { return [n, n]; }), l.roomNoun) + '</select>' +
+          textInput('ln-note-' + i, ov.scopeNote !== undefined ? ov.scopeNote : '', ' data-line="' + esc(l.key) + '" data-ov="scopeNote" placeholder="' + esc(l.scopeNoteAuto || 'note') + '"' +
+            ' title="Added after the height, e.g. o/ CMU" style="width:84px"') +
+          '</div><div class="scope-preview' + (l.scopeLabelOverridden ? ' typed' : '') + '" title="' + (l.scopeLabelOverridden ? 'Typed on the Quote tab' : 'Printed as the scope of work') + '">' +
+            esc(l.scopeLabel || '—') + '</div></td>' +
         '<td class="item-cell"><strong>' + esc(l.catalogSubject) + '</strong>' + (l.manual ? ' <span class="pill">manual</span>' : '') +
+          (l.subject && l.subject.toLowerCase() !== l.catalogSubject.toLowerCase() ? ' <span class="pill" title="Bluebeam subject">' + esc(l.subject) + '</span>' : '') +
           (l.room ? ' <span class="pill">' + esc(l.room) + '</span>' : '') +
           '<div class="hint">' + esc(l.description) + '</div></td>' +
         '<td>' + (l.unit === 'sf' ? ovInput('height', 'ln-h-' + i, null, l.height !== null ? U.formatFeet(l.height) : '?', 'w-xs') : '') + '</td>' +
@@ -434,10 +446,10 @@
         messages(warn) +
         empty +
         (lines.length ? '<div class="table-wrap"><table class="data"><thead><tr>' +
-          '<th></th><th>Rooms</th><th>Scope of work</th><th>Item</th><th>Height</th><th class="num">Takeoff qty</th><th>Priced qty</th><th class="num">Lineal ft</th>' +
+          '<th></th><th>Scope of work <span class="hint">(count · type · note)</span></th><th>Item</th><th>Height</th><th class="num">Takeoff qty</th><th>Priced qty</th><th class="num">Lineal ft</th>' +
           '<th>' + (anyNonSf ? 'Material $ / unit' : 'Material $ / sf') + '</th><th>' + (anyNonSf ? 'Install units / day' : 'Install sf / day') + '</th><th class="num">Labor days</th><th class="num">Material</th><th class="num">Labor</th><th class="num">Total</th><th></th>' +
           '</tr></thead><tbody>' + body + '</tbody>' +
-          '<tfoot><tr><td></td><td colspan="9">Totals</td><td class="num">' + U.formatNumber(t.laborDays, 3) + '</td>' +
+          '<tfoot><tr><td></td><td colspan="8">Totals</td><td class="num">' + U.formatNumber(t.laborDays, 3) + '</td>' +
           '<td class="num">' + U.formatMoney(t.material) + '</td><td class="num">' + U.formatMoney(t.labor) + '</td>' +
           '<td class="num">' + U.formatMoney(t.subtotal) + '</td><td></td></tr></tfoot></table></div>' : '') +
         addRow +
@@ -456,6 +468,9 @@
       var item = P.findCatalogItem(q.rates.catalog, l.catalogSubject) || {};
       return '<div class="card" style="background:#fafbfc">' +
         '<div class="card-head"><strong>' + esc(l.scopeLabel || l.catalogSubject) + '</strong><span class="hint">' + esc(l.catalogSubject) + ' · ' + U.formatMoney(l.total) + '</span></div>' +
+        field('Scope of work', textInput('qd-label-' + i, l.scopeLabelOverridden ? l.scopeLabel : '', ' data-line="' + esc(l.key) + '" data-ov="scopeLabel" placeholder="' + esc(l.scopeLabelAuto) + '"' +
+          (l.scopeLabelOverridden ? ' class="overridden"' : '')) +
+          '<span class="hint">' + (l.scopeLabelOverridden ? 'Typed by hand. Clear it to go back to the automatic label.' : 'Automatic from the Pricing tab (count, type, height, note). Type here to replace it.') + '</span>') +
         field('Material description', textInput('qd-desc-' + i, l.description, ' data-line="' + esc(l.key) + '" data-ov="description"') +
           (ov.description !== undefined ? '<button type="button" class="link small" data-act="reset-ov" data-line="' + esc(l.key) + '" data-ov="description">use catalog text</button>' : '')) +
         field('Scope paragraph', '<textarea rows="3" id="qd-scope-' + i + '" data-line="' + esc(l.key) + '" data-ov="scope">' + esc(l.scope) + '</textarea>' +
@@ -509,7 +524,7 @@
         (state.priced.totals.linesMissingRates ? messages([{ level: 'error', message: state.priced.totals.linesMissingRates +
           ' line(s) still need material $ and/or install sf/day. Enter them on the Pricing tab before sending this quote.' }]) : '') +
         (state.priced.totals.linesMissingRooms ? messages([{ level: 'warn', message: state.priced.totals.linesMissingRooms +
-          ' line(s) need a room count for the scope of work, e.g. "(3) ROOMS @ 8\' AFF". Enter it in the Rooms column on the Pricing tab.' }]) : '') +
+          ' line(s) need a count for the scope of work, e.g. "(3) ROOMS @ 8\' AFF". Enter it under Scope of work on the Pricing tab.' }]) : '') +
         '<div class="preview" id="preview">' + Q.render(q, state.priced, state.settings, state.previewMode) + '</div>' +
         '<p class="hint">Print opens the browser print dialog — choose <strong>Save as PDF</strong> as the destination.</p>' +
       '</div>';
@@ -795,7 +810,7 @@
     var noRooms = state.priced.totals.linesMissingRooms;
     var problems = [];
     if (missing) problems.push(missing + ' line' + (missing === 1 ? ' is' : 's are') + ' missing material $ or install sf/day, so the total is too low.');
-    if (noRooms) problems.push(noRooms + ' line' + (noRooms === 1 ? ' has' : 's have') + ' no room count, so the scope of work won\'t say "(X) ROOMS".');
+    if (noRooms) problems.push(noRooms + ' line' + (noRooms === 1 ? ' has' : 's have') + ' no count, so the scope of work won\'t say "(X) ROOMS / AREAS".');
     if (problems.length && !global.confirm(problems.join('\n') + '\nPrint anyway?')) return;
     var root = $('#print-root');
     root.innerHTML = Q.render(state.quote, state.priced, state.settings, mode);
@@ -827,6 +842,7 @@
     var ov = state.quote.lineOverrides[key] || (state.quote.lineOverrides[key] = {});
     // Clearing these fields goes back to the automatic value.
     var numeric = { qty: 1, height: 1, materialRate: 1, unitsPerDay: 1, rooms: 1, scopeLabel: 1 };
+    // (scopeNote is NOT cleared on blank: an empty note is a deliberate "no note".)
     if (numeric[f] && String(value).trim() === '') delete ov[f];
     else ov[f] = value;
     if (!Object.keys(ov).length) delete state.quote.lineOverrides[key];

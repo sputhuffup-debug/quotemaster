@@ -90,11 +90,38 @@
     return { qty: null, basis: 'missing' };
   }
 
-  /** "(3) ROOMS @ 8' AFF" — the scope-of-work label from the Excel sheet. */
+  /*
+   * Scope-of-work label, as on the Excel sheet:
+   *   (6) AREAS @ 10' AFF      (7) AREAS @ 10' AFF o/ CMU      (4) SOFFITS @ 2'      (3) ROOMS @ 8' AFF
+   * Overhead nouns (soffits, ceilings) give a depth, not a height above the floor, so they get no "AFF".
+   */
+  var NOUNS = {
+    ROOMS: { one: 'ROOM', aff: true },
+    AREAS: { one: 'AREA', aff: true },
+    WALLS: { one: 'WALL', aff: true },
+    COLUMNS: { one: 'COLUMN', aff: true },
+    SOFFITS: { one: 'SOFFIT', aff: false },
+    CEILINGS: { one: 'CEILING', aff: false }
+  };
+
+  /** Guess the noun / note from the Bluebeam subject: "FRP-SOFFIT" -> SOFFITS, "FRP-10' CMU" -> "o/ CMU". */
+  function guessNoun(subject) {
+    var s = String(subject || '');
+    if (/soffit/i.test(s)) return 'SOFFITS';
+    if (/ceiling|clg/i.test(s)) return 'CEILINGS';
+    if (/column|col\b/i.test(s)) return 'COLUMNS';
+    return 'ROOMS';
+  }
+  function guessNote(subject) {
+    return /\bcmu\b/i.test(String(subject || '')) ? 'o/ CMU' : '';
+  }
+
   function defaultScopeLabel(line) {
+    var noun = NOUNS[line.roomNoun] || { one: line.roomNoun, aff: true };
     var parts = [];
-    if (line.roomCount) parts.push('(' + line.roomCount + ') ' + (line.roomCount === 1 ? 'ROOM' : 'ROOMS'));
-    if (line.unit === 'sf' && line.height) parts.push('@ ' + U.formatFeet(line.height) + ' AFF');
+    if (line.roomCount) parts.push('(' + line.roomCount + ') ' + (line.roomCount === 1 ? noun.one : line.roomNoun));
+    if (line.unit === 'sf' && line.height) parts.push('@ ' + U.formatFeet(line.height) + (noun.aff ? ' AFF' : ''));
+    if (line.scopeNote) parts.push(line.scopeNote);
     return parts.join(' ');
   }
 
@@ -131,12 +158,19 @@
     var unmapped = {};
     var ignored = {};
 
-    function groupFor(item, height, room) {
+    // One line per Bluebeam subject × install height (× room). Two subjects priced as the same catalog
+    // item stay separate lines (e.g. "FRP-10'" and "FRP-10' CMU": same material, different sf/day).
+    var subjectOrder = {};
+    function groupFor(item, subject, height, room) {
       var hKey = item.unit === 'sf' ? (height === null ? '?' : String(+height.toFixed(4))) : '';
-      var key = item.subject + '|' + hKey + (quote.groupByRoom ? '|' + (room || '') : '');
+      var roomKey = quote.groupByRoom ? '|' + (room || '') : '';
+      var key = subject + '|' + hKey + roomKey;
       if (!groups[key]) {
+        if (subjectOrder[subject] === undefined) subjectOrder[subject] = Object.keys(subjectOrder).length;
         groups[key] = {
-          key: key, item: item, height: item.unit === 'sf' ? height : null,
+          key: key,
+          legacyKey: item.subject + '|' + hKey + roomKey,   // key format before per-subject lines
+          item: item, subject: subject, height: item.unit === 'sf' ? height : null,
           room: quote.groupByRoom ? (room || '') : null,
           rowIds: [], rooms: [], rawQty: 0, hasQty: false, manual: false
         };
@@ -166,7 +200,7 @@
       if (item.unit === 'sf' && row.installHeight === null) {
         warnings.push({ level: 'warn', code: 'noheight', rowId: row.id, message: 'Row ' + row.line + ' (' + row.subject + ') has no Install Height.' });
       }
-      var g = groupFor(item, row.installHeight, row.room || row.space);
+      var g = groupFor(item, row.baseSubject, row.installHeight, row.room || row.space);
       g.rowIds.push(row.id);
       g.rawQty += q.qty;
       g.hasQty = true;
@@ -198,6 +232,8 @@
       if (A.manual) return 0;
       var d = catIndex[A.item.subject] - catIndex[B.item.subject];
       if (d) return d;
+      d = subjectOrder[A.subject] - subjectOrder[B.subject];   // takeoff order within an item
+      if (d) return d;
       d = (A.height || 0) - (B.height || 0);
       if (d) return d;
       return String(A.room || '').localeCompare(String(B.room || ''));
@@ -206,12 +242,14 @@
     var lines = order.map(function (key) {
       var g = groups[key];
       var item = g.item;
-      var ov = overrides[key] || {};
+      // Quotes saved before per-subject lines keyed overrides by catalog item; still honour those.
+      var ov = overrides[key] || (g.legacyKey && overrides[g.legacyKey]) || {};
       var line = {
         key: key,
         manual: g.manual,
         manualId: g.manualId,
         catalogSubject: item.subject,
+        legacyKey: g.legacyKey || null,
         code: item.code || '',
         unit: item.unit,
         rowIds: g.rowIds,
@@ -247,6 +285,11 @@
       line.roomsAuto = g.rooms.length || null;
       line.roomsOverridden = parseRooms(ov.rooms) !== null;
       line.roomCount = line.roomsOverridden ? parseRooms(ov.rooms) : line.roomsAuto;
+      line.subject = g.subject || null;
+      line.roomNounAuto = guessNoun(g.subject || item.subject);
+      line.roomNoun = ov.roomNoun ? String(ov.roomNoun).toUpperCase() : line.roomNounAuto;
+      line.scopeNoteAuto = guessNote(g.subject || item.subject);
+      line.scopeNote = ov.scopeNote !== undefined ? String(ov.scopeNote).trim() : line.scopeNoteAuto;
       line.scopeLabelAuto = defaultScopeLabel(line);
       line.scopeLabelOverridden = ov.scopeLabel !== undefined;
       line.scopeLabel = line.scopeLabelOverridden ? ov.scopeLabel : line.scopeLabelAuto;
@@ -267,7 +310,7 @@
       if (l.needsRooms) {
         totals.linesMissingRooms++;
         warnings.push({ level: 'warn', code: 'needsrooms', lineKey: l.key,
-          message: (l.scopeLabel || l.catalogSubject) + ' (' + l.catalogSubject + '): enter the number of rooms for the scope of work, e.g. "(3) ROOMS ' + (l.scopeLabel || '') + '".' });
+          message: (l.scopeLabel || l.catalogSubject) + ' (' + (l.subject || l.catalogSubject) + '): enter the count for the scope of work, e.g. "(3) ' + l.roomNoun + ' ' + (l.scopeLabel || '') + '".' });
       }
       if (l.missingRates.length) {
         totals.linesMissingRates++;
@@ -299,6 +342,7 @@
   }
 
   global.Pricing = {
+    NOUNS: NOUNS,
     IGNORE: IGNORE,
     price: price,
     dayRate: dayRate,

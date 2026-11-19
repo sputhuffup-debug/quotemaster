@@ -15,6 +15,15 @@
   }
   function escMultiline(s) { return esc(s).replace(/\r?\n/g, '<br>'); }
 
+  /** Scope label that only wraps between chunks: "(7) AREAS" | "@ 10' AFF" | "o/ CMU". */
+  function scopeLabelHtml(s) {
+    return esc(s)
+      .replace(/^\((\d+)\) /, '($1)&nbsp;')
+      .replace(/ @ /g, ' @&nbsp;')
+      .replace(/ AFF\b/g, '&nbsp;AFF')
+      .replace(/\bo\/ /g, 'o/&nbsp;');
+  }
+
   /** Snapshot of the rates a quote is priced with (so a saved quote re-opens with its original numbers). */
   function ratesFromSettings(settings) {
     return {
@@ -220,7 +229,7 @@
       return '' +
         '<tbody class="doc-line">' +
         '<tr>' +
-          '<td class="doc-scope-label">' + esc(l.scopeLabel) + '</td>' +
+          '<td class="doc-scope-label">' + scopeLabelHtml(l.scopeLabel) + '</td>' +
           '<td>' + esc(l.description) + (l.code ? '<div class="doc-code">' + esc(l.code) + '</div>' : '') + '</td>' +
           '<td class="num">' + (l.linealFt !== null ? U.formatNumber(l.linealFt) : '') + '</td>' +
           '<td class="num">' + (l.height ? esc(U.formatFeet(l.height)) : '') + '</td>' +
@@ -307,7 +316,7 @@
     if (!lump) head += '<th class="num">Price</th>';
 
     var body = lines.map(function (l) {
-      var r = '<tr><td class="doc-scope-label">' + esc(l.scopeLabel) + '</td><td>' + esc(l.description) + '</td>';
+      var r = '<tr><td class="doc-scope-label">' + scopeLabelHtml(l.scopeLabel) + '</td><td>' + esc(l.description) + '</td>';
       if (showQty) {
         r += '<td class="num">' + (l.linealFt !== null ? U.formatNumber(l.linealFt) : '') + '</td>' +
           '<td class="num">' + (l.height ? esc(U.formatFeet(l.height)) : '') + '</td>' +
