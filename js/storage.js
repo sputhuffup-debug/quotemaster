@@ -36,6 +36,15 @@
       if (blank) out.company = clone(global.DEFAULTS.company);
       else if (!inC.logoLayout) out.company.logoLayout = 'beside';   // an earlier upload was a small logo
     }
+    // v3 -> v4: one hourly rate became Local + Bay Area. The old default $148 was the Bay Area rate;
+    // a rate someone set themselves is kept as their Local rate.
+    if (fromVersion < 4) {
+      var inL = (s && s.labor) || {};
+      if (inL.bayAreaHourlyRate === undefined) {
+        out.labor.bayAreaHourlyRate = global.DEFAULTS.labor.bayAreaHourlyRate;
+        if (inL.hourlyRate === undefined || +inL.hourlyRate === 148) out.labor.hourlyRate = global.DEFAULTS.labor.hourlyRate;
+      }
+    }
     out.version = global.DEFAULTS.version;
     out.catalog = (out.catalog || []).map(global.Pricing.normalizeCatalogItem);
     if (!Array.isArray(out.terms.notes)) out.terms.notes = String(out.terms.notes || '').split(/\r?\n/).filter(Boolean);

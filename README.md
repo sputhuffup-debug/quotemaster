@@ -21,7 +21,7 @@ To run it, double-click `index.html`. To run the tests, double-click `test/tests
 
 1. **Settings** tab: the Universal Plastics letterhead and company details are filled in by default. Add a phone/email if wanted. Check the catalog and labor rates. Click **Export settings** to keep a backup.
 2. **Import** tab: drop the Bluebeam Markups Summary CSV. Check the subtotal check and the subject mapping.
-3. **Pricing** tab: for each line, fill in the scope of work (**count**, **type** such as ROOMS / AREAS / SOFFITS, and an optional **note** such as "o/ CMU"), then the **material $/sf** and the **install sf/day**. These build labels like "(3) ROOMS @ 8' AFF" or "(7) AREAS @ 10' AFF o/ CMU". Set **Per diem + vehicle** to 0 on local jobs. These start blank, and red fields still need a value.
+3. **Pricing** tab: for each line, fill in the scope of work (**count**, **type** such as ROOMS / AREAS / SOFFITS, and an optional **note** such as "o/ CMU"), then the **material $/sf** and the **install sf/day**. These build labels like "(3) ROOMS @ 8' AFF" or "(7) AREAS @ 10' AFF o/ CMU". The **Local / Bay Area** union rate is picked from the project address (Quote tab). Check it under *Labor area*. Set **Per diem + vehicle** to 0 on local jobs. These start blank, and red fields still need a value.
    - **Total SQ** starts as the Waste Sq Ft from Bluebeam, shown alongside for checking. Type your own number in Total SQ; a value below the takeoff gets a **red border**.
    - **Labor days** can be typed directly for jobs priced by days.
    - Any other rate or quantity can be adjusted for this quote only; changed fields turn yellow.
@@ -157,7 +157,7 @@ This is reverse-engineered from the current Excel template (`Template` sheet, ro
 | Lineal Ft | `J9 = ROUNDUP(L9/K9, 0)` | `ceil(totalSq / height)` |
 | **Material (M)** | `H9 = L9 * 2.85` | `totalSq × materialRatePerSf` |
 | **Labor (L)** | `H10 = L9 / 320 * A11` | `(totalSq / sfPerDay) × dayRate` |
-| Day rate | `A11 = 148*8 + 400` | `hourlyRate × hoursPerDay + dailyAdder`. This is the all-in labor cost per crew-day: `dailyAdder` covers per diem and vehicle use. In Excel it can sit in any cell; the app computes it from Settings. |
+| Day rate | `A11 = 148*8 + 400` | `union hourly rate × hoursPerDay + dailyAdder`. The hourly rate is **Local** or **Bay Area** depending on the project city (see "Union rates" below). This is the all-in labor cost per crew-day: `dailyAdder` covers per diem and vehicle use. In Excel it can sit in any cell; the app computes it from Settings. |
 | **Line total** | `D15 = SUM(H9:I12)` | `M + L` |
 
 Labor days are **not** rounded in the current sheet (6.875 days). Make rounding a setting: `none | half | whole`, default `none` to match the current numbers.
@@ -192,6 +192,14 @@ Labor days are **not** rounded in the current sheet (6.875 days). Make rounding 
   - The Pricing tab shows that original basis (**Waste Sq Ft**) next to the editable **Total SQ**, so a typed number can be checked against what Bluebeam measured.
   - A Total SQ typed **below** the takeoff gets a red border and a warning. It is still allowed, but is likely a typo. The internal take-off marks it "BELOW TAKEOFF"; the GC proposal never shows this.
   - "Round SF up to" still exists as an option (0 = none). Settings saved while 100 was the default are upgraded to 0.
+- **Union rates (Local vs Bay Area):**
+  - Two hourly rates are kept: **Local $140/hr** and **Bay Area $148/hr** (2026). Update both each year in Settings.
+  - The project city is read from the project address. For example, "2165 Lombard St, San Francisco CA, 94123" gives San Francisco, and a city in **Settings → Union wage areas** gets the Bay Area rate; every other city (or no address) gets Local.
+  - The city list starts as the cities of the nine Bay Area counties. Edit it to match the union's wage areas.
+  - On the Pricing tab, *Labor area* shows what was picked ("Auto: San Francisco → Bay Area") and can be forced to Local or Bay Area for one quote. The rate in use is marked "✓ used". The Quote tab shows it under the project address.
+  - Hours/day and per diem + vehicle are separate settings that don't depend on the area.
+  - An area whose rate is blank flags the quote as incomplete.
+  - Quotes saved before this change keep the one rate they were priced with. Saved settings holding the old single $148 default become $140 Local / $148 Bay Area; a rate someone set themselves is kept as Local.
 - **Labor by days:** a line's Labor days can be typed instead of being calculated from sf/day. Example: the Vons custom Symmetrix line is 9 days × the day rate. Clearing it goes back to sf/day.
 - **Per-quote overrides:** each quote stores a snapshot of the catalog, labor and quantity settings. Any line can override its Total SQ, height, $/unit, units/day or labor days. Blank means automatic.
 - **Scope of work label:** built as `(count) TYPE @ height' AFF note`, matching the Excel sheets: `(3) ROOMS @ 8' AFF`, `(6) AREAS @ 10' AFF`, `(7) AREAS @ 10' AFF o/ CMU`, `(4) SOFFITS @ 2'`.
@@ -226,7 +234,8 @@ window.DEFAULTS = {
     }
   ],
   subjectMap: {},            // remembered Bluebeam Subject -> catalog subject ("__ignore__" = leave off)
-  labor: { hourlyRate: 148, hoursPerDay: 8, dailyAdder: 400, dayRounding: "none" },
+  labor: { hourlyRate: 140, bayAreaHourlyRate: 148, hoursPerDay: 8, dailyAdder: 400, dayRounding: "none" },  // Local / Bay Area $/hr
+  bayAreaCities: ["Alameda", "Albany", /* … nine Bay Area counties … */ "Windsor"],
   quantity: { source: "wasteSqFt", roundTo: 0, wastePct: 7 },   // 0 = Total SQ is the Waste Sq FT. sum as-is
   rateEntry: "manual",       // "manual" = type material $ and sf/day per quote | "catalog" = pre-fill from catalog
   company: { name: "", address: "", phone: "", email: "", license: "", logoDataUrl: "" },
@@ -357,6 +366,7 @@ All six milestones are implemented. `test/tests.html` covers milestones 1 and 2,
 - [ ] **`SQ. FT` vs length × height:** the Bluebeam values don't exactly equal Measurement × 8 (181.69 × 8 = 1,453.5, but the CSV says 1,469). What formula does the Revu custom column use? Should the app trust it or recompute it?
 - [ ] **`Mat. Height`** (16 and 8 in the sample): is this panel sheet height, and does it affect pricing?
 - [x] **Day rate:** $1,584/day is the all-in labor cost per crew-day: $148/hr × 8 hrs plus $400 for per diem and vehicle use. The UI labels the $400 "Per diem + vehicle". It varies by job: Roseville used $1,184 (no per diem/vehicle). Set it per quote on the Pricing tab.
+- [x] **Union rates:** Local $140/hr, Bay Area $148/hr (2026), picked from the project city. Note that the Roseville sheet (a Local city) was priced at $148/hr.
 - [x] **Material $ and sf/day:** entered by hand on each quote for now. Material costs will come from an Excel price list (~150 items); the import is built (§4.4). Next step: build the real price list and switch to "Pre-fill from catalog".
 - [ ] **Labor production:** is 320 sf/day still the usual figure? Is the day rate the same on every job? (It can be changed per quote on the Pricing tab.)
 - [ ] **GC proposal:** show the material/labor split, or a lump sum only? Is tax included or excluded?

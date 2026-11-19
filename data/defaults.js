@@ -8,7 +8,7 @@
  *   roundTo       optional: round the priced quantity up to this multiple (default: quantity.roundTo for sf, 1 otherwise)
  */
 window.DEFAULTS = {
-  version: 3,   // settings format; see RqbStorage.normalizeSettings for upgrades
+  version: 4,   // settings format; see RqbStorage.normalizeSettings for upgrades
   catalog: [
     {
       subject: "FRP-8'",
@@ -23,7 +23,31 @@ window.DEFAULTS = {
   // Remembered Bluebeam Subject -> catalog subject mappings ("__ignore__" = leave off the quote).
   subjectMap: {},
   // Labor cost per crew-day = hourlyRate × hoursPerDay + dailyAdder (per diem + vehicle use) = $1,584.00
-  labor: { hourlyRate: 148, hoursPerDay: 8, dailyAdder: 400, dayRounding: "none" },
+  // Union rates (2026): hourlyRate = Local rate $140/hr; bayAreaHourlyRate = Bay Area rate $148/hr.
+  // Which one a quote uses comes from the project city (bayAreaCities below), or is picked on the Pricing tab.
+  labor: { hourlyRate: 140, bayAreaHourlyRate: 148, hoursPerDay: 8, dailyAdder: 400, dayRounding: "none" },
+  // Projects in these cities get the Bay Area rate. Starts as the cities of the nine Bay Area counties;
+  // edit in Settings to match the union's wage areas.
+  bayAreaCities: [
+    // Alameda County
+    "Alameda", "Albany", "Berkeley", "Dublin", "Emeryville", "Fremont", "Hayward", "Livermore", "Newark", "Oakland", "Piedmont", "Pleasanton", "San Leandro", "Union City", "Castro Valley", "San Lorenzo", "Sunol",
+    // Contra Costa County
+    "Antioch", "Brentwood", "Clayton", "Concord", "Danville", "El Cerrito", "Hercules", "Lafayette", "Martinez", "Moraga", "Oakley", "Orinda", "Pinole", "Pittsburg", "Pleasant Hill", "Richmond", "San Pablo", "San Ramon", "Walnut Creek", "Alamo", "Bay Point", "Crockett", "Discovery Bay", "El Sobrante", "Kensington", "Rodeo",
+    // Marin County
+    "Belvedere", "Corte Madera", "Fairfax", "Larkspur", "Mill Valley", "Novato", "Ross", "San Anselmo", "San Rafael", "Sausalito", "Tiburon", "Greenbrae", "Kentfield", "Marin City",
+    // Napa County
+    "American Canyon", "Calistoga", "Napa", "St. Helena", "Yountville",
+    // San Francisco County
+    "San Francisco",
+    // San Mateo County
+    "Atherton", "Belmont", "Brisbane", "Burlingame", "Colma", "Daly City", "East Palo Alto", "Foster City", "Half Moon Bay", "Hillsborough", "Menlo Park", "Millbrae", "Pacifica", "Portola Valley", "Redwood City", "San Bruno", "San Carlos", "San Mateo", "South San Francisco", "Woodside",
+    // Santa Clara County
+    "Campbell", "Cupertino", "Gilroy", "Los Altos", "Los Altos Hills", "Los Gatos", "Milpitas", "Monte Sereno", "Morgan Hill", "Mountain View", "Palo Alto", "San Jose", "Santa Clara", "Saratoga", "Sunnyvale", "San Martin",
+    // Solano County
+    "Benicia", "Dixon", "Fairfield", "Rio Vista", "Suisun City", "Vacaville", "Vallejo",
+    // Sonoma County
+    "Cloverdale", "Cotati", "Healdsburg", "Petaluma", "Rohnert Park", "Santa Rosa", "Sebastopol", "Sonoma", "Windsor"
+  ],
   // source: "wasteSqFt" (Bluebeam Waste Sq FT. column) | "sqFt" (SQ. FT + wastePct) | "calc" (Measurement x Install Height + wastePct)
   // roundTo 0 = Total SQ is exactly the Waste Sq FT. sum; change it per line on the Pricing tab.
   quantity: { source: "wasteSqFt", roundTo: 0, wastePct: 7 },

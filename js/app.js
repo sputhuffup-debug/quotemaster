@@ -171,9 +171,25 @@
     global.scrollTo(0, scrollY);
   }
 
+  /** "San Francisco → Bay Area" / "Roseville → Local" / "no city in the address → Local" */
+  function areaText(a) {
+    if (!a) return '';
+    return (a.city ? a.city : 'no city in the address') + ' → ' + (a.inList ? 'Bay Area' : 'Local');
+  }
+  function areaHint() {
+    var a = state.priced.laborArea;
+    var lab = state.quote.rates.labor;
+    var rate = a.zone === 'bay' ? lab.bayAreaHourlyRate : lab.hourlyRate;
+    var r = U.parseNumber(rate);
+    return 'Labor rate: <strong>' + (a.zone === 'bay' ? 'Bay Area' : 'Local') + '</strong> ' + (r === null ? '(not set)' : U.formatMoney(r) + '/hr') +
+      (a.mode === 'auto' ? ' (' + esc(areaText(a)) + ')' : ' (picked on the Pricing tab)');
+  }
+
   function renderLight() {
     renderTopbar();
     renderTabs();
+    var ah = $('#q-area-hint');
+    if (ah) ah.innerHTML = areaHint();
     var prev = $('#preview');
     if (prev) prev.innerHTML = Q.render(state.quote, state.priced, state.settings, state.previewMode);
     var tot = $('#totals-bar');
@@ -344,7 +360,14 @@
         '<div class="card-head"><h3>Rates for this quote</h3>' +
           '<button type="button" data-act="reload-rates" title="Replace this quote\'s rates and catalog prices with the current Settings">Reload rates from Settings</button></div>' +
         '<div class="grid">' +
-          field('Hourly rate ($)', numInput('r-hourly', lab.hourlyRate, ' data-q="rates.labor.hourlyRate"')) +
+          field('Labor area (union rate)', '<select id="r-zone" data-q="laborZone">' + options([
+            ['auto', 'Auto: ' + areaText(priced.laborArea)],
+            ['local', 'Local rate'],
+            ['bay', 'Bay Area rate']], q.laborZone || 'auto') + '</select>', 'span2') +
+          field('Local rate ($/hr)' + (priced.laborArea.zone === 'local' ? ' ✓ used' : ''), numInput('r-hourly', lab.hourlyRate, ' data-q="rates.labor.hourlyRate"' +
+            (priced.laborArea.zone === 'local' && U.parseNumber(lab.hourlyRate) === null ? ' class="num required"' : ''))) +
+          field('Bay Area rate ($/hr)' + (priced.laborArea.zone === 'bay' ? ' ✓ used' : ''), numInput('r-bayhourly', lab.bayAreaHourlyRate, ' data-q="rates.labor.bayAreaHourlyRate"' +
+            (priced.laborArea.zone === 'bay' && U.parseNumber(lab.bayAreaHourlyRate) === null ? ' class="num required"' : ''))) +
           field('Hours / day', numInput('r-hours', lab.hoursPerDay, ' data-q="rates.labor.hoursPerDay"')) +
           field('Per diem + vehicle ($/day)', numInput('r-adder', lab.dailyAdder, ' data-q="rates.labor.dailyAdder"')) +
           field('Labor cost / day (all-in)', '<input type="text" class="num" readonly tabindex="-1" title="Hourly × hours + per diem & vehicle" value="' + esc(U.formatMoney(priced.dayRate)) + '">') +
@@ -505,7 +528,7 @@
           field('General contractor', textInput('q-gc', q.gc.name, ' data-q="gc.name"')) +
           field('Attention', textInput('q-attn', q.gc.attention, ' data-q="gc.attention"')) +
           field('Project name', textInput('q-proj', q.project.name, ' data-q="project.name"')) +
-          field('Project address', textInput('q-addr', q.project.address, ' data-q="project.address"')) +
+          field('Project address', textInput('q-addr', q.project.address, ' data-q="project.address"') + '<span class="hint" id="q-area-hint">' + areaHint() + '</span>') +
         '</div>' +
         '<div class="field" style="margin-top:10px"><span>Construction type</span><div class="radio-group">' +
           ['new', 'remodel', ''].map(function (v) {
@@ -554,6 +577,10 @@
     if (field === 'materialRate') return U.formatMoney(v);
     if (field === 'unit') return String(v).toUpperCase();
     return String(v);
+  }
+
+  function dayRatesText(labor) {
+    return U.formatMoney(P.dayRate(labor)) + ' · ' + U.formatMoney(P.dayRate(Object.assign({}, labor, { hourlyRate: labor.bayAreaHourlyRate })));
   }
 
   function renderPriceListCard() {
@@ -689,10 +716,11 @@
       '<div class="card">' +
         '<h3>Labor &amp; quantities</h3>' +
         '<div class="grid">' +
-          field('Hourly rate ($)', numInput('s-hourly', s.labor.hourlyRate, ' data-s="labor.hourlyRate"')) +
+          field('Local rate ($/hr)', numInput('s-hourly', s.labor.hourlyRate, ' data-s="labor.hourlyRate"')) +
+          field('Bay Area rate ($/hr)', numInput('s-bayhourly', s.labor.bayAreaHourlyRate, ' data-s="labor.bayAreaHourlyRate"')) +
           field('Hours / day', numInput('s-hours', s.labor.hoursPerDay, ' data-s="labor.hoursPerDay"')) +
           field('Per diem + vehicle ($/day)', numInput('s-adder', s.labor.dailyAdder, ' data-s="labor.dailyAdder"')) +
-          field('Labor cost / day (all-in)', '<input type="text" class="num" readonly tabindex="-1" id="s-dayrate" title="Hourly × hours + per diem & vehicle" value="' + esc(U.formatMoney(P.dayRate(s.labor))) + '">') +
+          field('Labor cost / day: Local · Bay Area', '<input type="text" class="num" readonly tabindex="-1" id="s-dayrate" title="Hourly × hours + per diem & vehicle" value="' + esc(dayRatesText(s.labor)) + '">') +
           field('Round labor days', '<select id="s-dayround" data-s="labor.dayRounding">' + options([['none', 'No rounding'], ['half', 'Up to ½ day'], ['whole', 'Up to whole day']], s.labor.dayRounding) + '</select>') +
           field('SF quantity from', '<select id="s-source" data-s="quantity.source">' + options([['wasteSqFt', 'Waste Sq FT. column'], ['sqFt', 'SQ. FT column + waste %'], ['calc', 'Length × Install Ht + waste %']], s.quantity.source) + '</select>') +
           field('Round SF up to (0 = none)', numInput('s-roundto', s.quantity.roundTo, ' data-s="quantity.roundTo"')) +
@@ -700,6 +728,13 @@
           field('Material $ & install rate', '<select id="s-rateentry" data-s="rateEntry">' +
             options([['manual', 'Type in on each quote'], ['catalog', 'Pre-fill from catalog']], s.rateEntry || 'manual') + '</select>') +
         '</div>' +
+      '</div>' +
+      '<div class="card">' +
+        '<h3>Union wage areas</h3>' +
+        '<p class="hint">Projects whose address is in one of these cities get the <strong>Bay Area rate</strong>; every other city gets the <strong>Local rate</strong>. ' +
+          'The list starts with the cities of the nine Bay Area counties: edit it to match the union\'s wage areas. One city per line. A quote can also pick its rate on the Pricing tab.</p>' +
+        '<textarea rows="8" id="s-baycities" data-s="bayAreaCities" data-lines="1" style="max-width:420px">' + esc((s.bayAreaCities || []).join('\n')) + '</textarea>' +
+        '<div class="hint">' + (s.bayAreaCities || []).length + ' cities</div>' +
       '</div>' +
       '<div class="card">' +
         '<h3>Terms &amp; numbering</h3>' +
@@ -917,7 +952,7 @@
       setPath(state.settings, t.dataset.s, sv);
       settingsChanged();
       var dr = $('#s-dayrate');
-      if (dr) dr.value = U.formatMoney(P.dayRate(state.settings.labor));
+      if (dr) dr.value = dayRatesText(state.settings.labor);
       return;
     }
     if (t.dataset.cat !== undefined) {
