@@ -201,3 +201,14 @@ table.data td.item-cell { min-width: 220px; }
 /* Preview: the take-off detail prints on its own page; show where the page breaks */
 .preview .doc .doc-takeoff { margin-top: 48px; padding-top: 28px; border-top: 2px dashed #8a919c; position: relative; }
 .preview .doc .doc-takeoff::before { content: "new page"; position: absolute; top: -11px; left: 50%; transform: translateX(-50%); background: #fff; color: #8a919c; font: 600 11px/20px system-ui, sans-serif; padding: 0 8px; text-transform: uppercase; letter-spacing: .08em; }
+
+/* Pricing tab: alternates */
+.alt-table td { vertical-align: top; }
+.alt-num { white-space: nowrap; }
+.alt-fields { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: flex-end; }
+.alt-field { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.alt-field > span { color: var(--muted); font-weight: 600; font-size: 11px; }
+.alt-field select { width: auto !important; }
+.alt-hint { flex-basis: 100%; }
+.alt-result { white-space: nowrap; font-size: 15px; color: var(--ok); }
+.alt-result.deduct { color: #a52020; }

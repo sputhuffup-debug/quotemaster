@@ -55,6 +55,7 @@
       source: null,          // { fileName, importedAt, headers, rows, subtotals, warnings }
       excludedRows: {},
       manualLines: [],
+      alternates: [],        // ADD / DEDUCT alternates (not in the base bid); see Pricing.priceAlternates
       lineOverrides: {},
       rates: ratesFromSettings(settings)
     };
@@ -70,6 +71,7 @@
     out.internal = Object.assign({ showCalc: false }, out.internal || {});
     out.excludedRows = out.excludedRows || {};
     out.manualLines = out.manualLines || [];
+    out.alternates = Array.isArray(out.alternates) ? out.alternates : [];
     out.lineOverrides = out.lineOverrides || {};
     out.rates = out.rates || ratesFromSettings(settings);
     out.rates.catalog = (out.rates.catalog || []).map(global.Pricing.normalizeCatalogItem);
@@ -214,7 +216,9 @@
       if (!opts.split) totalsRows += '<tr><th>Subtotal</th><td>' + U.formatMoney(t.subtotal) + '</td></tr>';
       totalsRows += '<tr><th>Sales tax on material (' + U.formatNumber(t.taxPct, 3) + '%)</th><td>' + U.formatMoney(t.tax) + '</td></tr>';
     }
-    totalsRows += '<tr class="doc-grand"><th>' + (opts.lumpSum ? 'Lump sum total' : 'Total') + '</th><td>' + U.formatMoney(t.total) + '</td></tr>';
+    var hasAlts = priced.alternates && priced.alternates.length;
+    totalsRows += '<tr class="doc-grand"><th>' + (hasAlts ? (opts.lumpSum ? 'Base bid (lump sum)' : 'Base bid') : (opts.lumpSum ? 'Lump sum total' : 'Total')) +
+      '</th><td>' + U.formatMoney(t.total) + '</td></tr>';
     return '' +
       '<section class="doc-foot">' +
         '<div class="doc-foot-left">' +
@@ -228,6 +232,57 @@
         '</div>' +
         '<table class="doc-totals">' + totalsRows + '</table>' +
       '</section>';
+  }
+
+  /* ---------- alternates ---------- */
+
+  function altName(a) { return (a.direction === 'deduct' ? 'DEDUCT' : 'ADD') + ' ALTERNATE #' + a.number; }
+  function altPrice(a) {
+    return a.direction === 'deduct' ? 'DEDUCT (' + U.formatMoney(a.amount) + ')' : 'ADD ' + U.formatMoney(a.amount);
+  }
+  function altQty(a) {
+    if (a.kind === 'lump' || a.qty === undefined || a.qty === null) return '';
+    if (a.kind === 'swap' && (!a.baseLine || a.qty === a.baseLine.qty)) return '';
+    return U.formatNumber(a.qty, 2) + (a.unit && a.unit !== 'sf' ? ' ' + unitLabel(a.unit) : '');
+  }
+  function altDetail(a) {
+    if (a.kind === 'line') return esc(a.description);
+    if (a.kind === 'swap' && !a.baseLine) return '';
+    if (a.kind === 'swap') return 'Applies to: ' + scopeLabelHtml(a.baseLine.scopeLabel) + ' &mdash; ' + esc(a.baseLine.description);
+    return '';
+  }
+
+  /** "ALTERNATES (not included in base bid)" under the base bid total. internal = with M / L split and the changes. */
+  function renderAlternates(quote, priced, opts) {
+    var alts = priced.alternates || [];
+    if (!alts.length) return '';
+    var showQty = opts.internal || (quote.proposal || {}).showUnitQty !== false;
+    var head = '<th>Alternate</th><th>Description</th>' + (showQty ? '<th class="num">Qty</th>' : '') +
+      (opts.internal ? '<th class="num">M</th><th class="num">L</th>' : '') + '<th class="num">Price</th>';
+    var rows = alts.map(function (a) {
+      var detail = altDetail(a);
+      var calc = '';
+      if (opts.internal) {
+        var bits = [];
+        if (a.kind === 'swap' && a.changes && a.changes.length) bits.push(a.changes.map(esc).join(', '));
+        if (a.kind === 'line' && a.materialRate !== null && a.materialRate !== undefined) {
+          bits.push(U.formatMoney(a.materialRate) + '/' + a.unit + (a.laborDaysEntered ? ', ' + U.formatNumber(a.laborDays, 3) + ' days (entered)'
+            : (a.unitsPerDay ? ', ' + U.formatNumber(a.unitsPerDay, 2) + ' ' + a.unit + '/day = ' + U.formatNumber(a.laborDays, 3) + ' days' : '')));
+        }
+        if (a.tax) bits.push('incl. sales tax ' + U.formatMoney(a.tax));
+        if (a.missing.length) bits.push('<strong class="doc-flag">INCOMPLETE: enter ' + esc(a.missing.join(', ')) + '</strong>');
+        if (bits.length) calc = '<div class="doc-code">' + bits.join(' &nbsp;|&nbsp; ') + '</div>';
+      }
+      var signed = function (v) { return v ? (v < 0 ? '(' + U.formatMoney(-v) + ')' : U.formatMoney(v)) : ''; };
+      return '<tr>' +
+        '<td class="doc-alt-name">' + altName(a) + '</td>' +
+        '<td><div class="doc-alt-title">' + (esc(a.title) || '&nbsp;') + '</div>' + (detail ? '<div class="doc-code">' + detail + '</div>' : '') + calc + '</td>' +
+        (showQty ? '<td class="num">' + altQty(a) + '</td>' : '') +
+        (opts.internal ? '<td class="num">' + signed(a.material) + '</td><td class="num">' + signed(a.labor) + '</td>' : '') +
+        '<td class="num doc-strong">' + altPrice(a) + '</td></tr>';
+    }).join('');
+    return '<section class="doc-alts"><div class="doc-label"><span class="doc-section">Alternates</span> (not included in base bid)</div>' +
+      '<table class="doc-lines doc-alt-table"><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody></table></section>';
   }
 
   function renderInternal(quote, priced, settings) {
@@ -300,6 +355,7 @@
         '<p class="doc-rates">' + rateLine + '</p>' +
         renderScope(quote, priced) +
         renderFooter(quote, priced, { split: true, lumpSum: false }) +
+        renderAlternates(quote, priced, { internal: true }) +
         renderTakeoffDetail(quote, priced) +
       '</article>';
   }
@@ -391,6 +447,7 @@
         '</table>' +
         renderScope(quote, priced) +
         renderFooter(quote, priced, { split: split, lumpSum: lump }) +
+        renderAlternates(quote, priced, { internal: false }) +
         (quote.validDays ? '<p class="doc-fine">This proposal is valid for ' + esc(quote.validDays) + ' days from the date above.</p>' : '') +
         '<section class="doc-sign">' +
           '<div><div class="doc-sign-line"></div>Accepted by (' + (esc(quote.gc.name) || 'General Contractor') + ')</div>' +

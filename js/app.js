@@ -498,7 +498,89 @@
         addRow +
       '</div>' +
       renderTotalsBar() +
+      renderAlternatesCard() +
       '<div class="row" style="margin-top:16px"><span class="spacer"></span><button type="button" class="primary" data-act="goto" data-tab="quote">Continue to Quote →</button></div>';
+  }
+
+  /* ---------- Alternates (Pricing tab) ---------- */
+
+  function altPriceText(r) {
+    return r.direction === 'deduct' ? 'DEDUCT (' + U.formatMoney(r.amount) + ')' : 'ADD ' + U.formatMoney(r.amount);
+  }
+
+  function renderAlternatesCard() {
+    var q = state.quote;
+    var priced = state.priced;
+    var alts = q.alternates || [];
+    var res = {};
+    (priced.alternates || []).forEach(function (r) { res[r.id] = r; });
+    var catalog = allCatalogItems();
+    var baseLines = priced.lines.filter(function (l) { return !l.excluded; });
+    var manualRates = q.rates.rateEntry !== 'catalog';
+
+    var rows = alts.map(function (a, i) {
+      var r = res[a.id] || { missing: [], number: i + 1, direction: 'add', amount: 0 };
+      function need(names) { return names.some(function (nm) { return r.missing.some(function (m) { return m.indexOf(nm) === 0 || m.slice(-nm.length) === nm; }); }); }
+      function inp(f, label, placeholder, width, required) {
+        var v = a[f] === undefined || a[f] === null ? '' : a[f];
+        return '<label class="alt-field"><span>' + label + '</span>' +
+          numInput('alt-' + f + '-' + i, v, ' data-alt="' + esc(a.id) + '" data-af="' + f + '" placeholder="' + esc(placeholder || '') + '" style="width:' + (width || 80) + 'px"' +
+            (required && String(v).trim() === '' ? ' class="num required"' : '')) + '</label>';
+      }
+      var fields = '';
+      var kindLabel = { line: 'Added scope', swap: 'VE swap', lump: 'Lump sum' }[a.kind];
+      if (a.kind === 'line') {
+        var item = P.findCatalogItem(catalog, a.catalogSubject) || {};
+        var u = item.unit || 'sf';
+        fields = '<label class="alt-field"><span>Item</span><select id="alt-item-' + i + '" data-alt="' + esc(a.id) + '" data-af="catalogSubject">' +
+            options(catalog.map(function (c) { return [c.subject, c.subject + ' (' + c.unit + ')']; }), a.catalogSubject) + '</select></label>' +
+          inp('qty', 'Qty (' + u + ')', '', 80, true) +
+          (u === 'sf' ? '<label class="alt-field"><span>Height</span>' + textInput('alt-height-' + i, a.height || '', ' data-alt="' + esc(a.id) + '" data-af="height" placeholder="8\'" style="width:60px"') + '</label>' : '') +
+          inp('materialRate', '$ / ' + u, manualRates ? 'enter' : String(item.materialRate === null || item.materialRate === undefined ? 'enter' : item.materialRate), 70, need(['material'])) +
+          inp('unitsPerDay', u + ' / day', manualRates ? 'enter' : String(item.unitsPerDay === null || item.unitsPerDay === undefined ? 'enter' : item.unitsPerDay), 70, need(['/day'])) +
+          inp('laborDays', 'or days', r.laborDays !== undefined && !r.laborDaysEntered ? U.formatNumber(r.laborDays, 3) : '', 60, false);
+      } else if (a.kind === 'swap') {
+        var base = r.baseLine;
+        fields = '<label class="alt-field"><span>On base line</span><select id="alt-line-' + i + '" data-alt="' + esc(a.id) + '" data-af="lineKey"' + (need(['base line']) ? ' class="required"' : '') + '>' +
+            (baseLines.some(function (l) { return l.key === a.lineKey; }) ? '' : '<option value="">— pick a line —</option>') +
+            options(baseLines.map(function (l) { return [l.key, (l.scopeLabel || l.catalogSubject) + ' — ' + l.catalogSubject]; }), a.lineKey) + '</select></label>' +
+          inp('qty', 'Qty', base ? U.formatNumber(base.qty, 2) : '', 80, false) +
+          inp('materialRate', '$ / ' + (base ? base.unit : 'unit'), base && base.materialRate !== null ? String(base.materialRate) : '', 70, false) +
+          inp('unitsPerDay', (base ? base.unit : 'units') + ' / day', base && base.unitsPerDay !== null ? String(base.unitsPerDay) : '', 70, false) +
+          inp('laborDays', 'or days', r.laborDays !== undefined ? U.formatNumber(r.laborDays, 3) : '', 60, false) +
+          '<span class="hint alt-hint">Blank = same as the base line. Type only what changes.</span>';
+      } else {
+        fields = '<label class="alt-field"><span>Add / deduct</span><select id="alt-dir-' + i + '" data-alt="' + esc(a.id) + '" data-af="direction">' +
+            options([['add', 'ADD'], ['deduct', 'DEDUCT']], a.direction || 'add') + '</select></label>' +
+          inp('amount', 'Amount ($)', '', 100, true);
+      }
+      var mlHint = a.kind !== 'lump' && (r.material || r.labor)
+        ? '<div class="hint">M ' + (r.material < 0 ? '(' + U.formatMoney(-r.material) + ')' : U.formatMoney(r.material)) +
+          ' · L ' + (r.labor < 0 ? '(' + U.formatMoney(-r.labor) + ')' : U.formatMoney(r.labor)) + '</div>' : '';
+      return '<tr>' +
+        '<td class="alt-num"><strong>#' + (i + 1) + '</strong><div><span class="pill">' + kindLabel + '</span></div></td>' +
+        '<td style="min-width:240px">' + textInput('alt-title-' + i, a.title || '', ' data-alt="' + esc(a.id) + '" data-af="title" style="width:100%" placeholder="' +
+          esc(a.kind === 'line' ? "(1) ROOM @ 8' AFF - FRP AT DISH ROOM" : a.kind === 'swap' ? 'VE: CLASS C IN LIEU OF CLASS A' : 'REMOVE EXISTING TILE') + '"') +
+          '<div class="hint">Printed on the proposal</div></td>' +
+        '<td><div class="alt-fields">' + fields + '</div></td>' +
+        '<td class="num alt-result' + (r.direction === 'deduct' ? ' deduct' : '') + '"><strong>' + altPriceText(r) + '</strong>' + mlHint + '</td>' +
+        '<td><button type="button" class="small danger" data-act="alt-del" data-id="' + esc(a.id) + '" title="Remove alternate">✕</button></td>' +
+        '</tr>';
+    }).join('');
+
+    return '' +
+      '<div class="card" style="margin-top:16px">' +
+        '<div class="card-head"><h3>Alternates <span class="muted" style="font-weight:400">(not included in base bid)</span></h3>' +
+          '<div class="row">' +
+            '<button type="button" data-act="alt-add" data-kind="line"' + (catalog.length ? '' : ' disabled') + '>+ Added scope</button>' +
+            '<button type="button" data-act="alt-add" data-kind="swap"' + (baseLines.length ? '' : ' disabled') + '>+ VE swap on a line</button>' +
+            '<button type="button" data-act="alt-add" data-kind="lump">+ Lump sum</button>' +
+          '</div></div>' +
+        (rows ? '<div class="table-wrap"><table class="data alt-table"><tbody>' + rows + '</tbody></table></div>'
+          : '<p class="hint" style="margin:0"><strong>Added scope</strong>: an extra line priced like the others (ADD). ' +
+            '<strong>VE swap</strong>: change a base line\'s $/sf, sf/day, days or qty; the difference is the ADD or DEDUCT. ' +
+            '<strong>Lump sum</strong>: type the amount. Alternates print as ADD ALTERNATE #1 / DEDUCT ALTERNATE #2 under the base bid.</p>') +
+      '</div>';
   }
 
   /* ---------- Quote panel ---------- */
@@ -877,6 +959,8 @@
     var missing = state.priced.totals.linesMissingRates;
     var noRooms = state.priced.totals.linesMissingRooms;
     var problems = [];
+    var altMissing = state.priced.totals.alternatesIncomplete;
+    if (altMissing) problems.push(altMissing + ' alternate' + (altMissing === 1 ? ' is' : 's are') + ' incomplete.');
     if (missing) problems.push(missing + ' line' + (missing === 1 ? ' is' : 's are') + ' missing material $ or install sf/day, so the total is too low.');
     if (noRooms) problems.push(noRooms + ' line' + (noRooms === 1 ? ' has' : 's have') + ' no count, so the scope of work won\'t say "(X) ROOMS / AREAS".');
     if (problems.length && !global.confirm(problems.join('\n') + '\nPrint anyway?')) return;
@@ -955,6 +1039,13 @@
       return;
     }
     if (t.dataset.map !== undefined) { setMapping(t.dataset.map, t.value); return; }
+    if (t.dataset.alt !== undefined) {
+      var alt = (state.quote.alternates || []).filter(function (x) { return x.id === t.dataset.alt; })[0];
+      if (!alt) return;
+      alt[t.dataset.af] = t.value;
+      changed(full ? 'full' : 'light');
+      return;
+    }
 
     // ----- settings -----
     if (t.id === 'cat-filter') { state.catFilter = t.value; render(); return; }
@@ -1038,6 +1129,31 @@
         changed();
         break;
       }
+      case 'alt-add': {
+        var kind = b.dataset.kind;
+        var na = { id: 'a' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), kind: kind, title: '' };
+        if (kind === 'line') {
+          var cat = allCatalogItems();
+          na.catalogSubject = (state.priced.lines[0] && state.priced.lines[0].catalogSubject) || (cat[0] && cat[0].subject) || '';
+          ensureQuoteHasItem(na.catalogSubject);
+          var bl = state.priced.lines[0];
+          if (bl && bl.unit === 'sf' && bl.height) na.height = U.formatFeet(bl.height);
+        } else if (kind === 'swap') {
+          var first = state.priced.lines.filter(function (l) { return !l.excluded; })[0];
+          na.lineKey = first ? first.key : '';
+        } else {
+          na.direction = 'add';
+        }
+        q.alternates = (q.alternates || []).concat([na]);
+        changed();
+        var tf = doc.getElementById('alt-title-' + (q.alternates.length - 1));
+        if (tf) tf.focus();
+        break;
+      }
+      case 'alt-del':
+        q.alternates = (q.alternates || []).filter(function (x) { return x.id !== b.dataset.id; });
+        changed();
+        break;
       case 'reset-scope':
         delete q.scopeText;
         changed();
