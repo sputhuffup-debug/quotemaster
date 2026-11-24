@@ -125,9 +125,56 @@
     var n = nextNumberFor(settings, quote.date);
     quote.number = formatQuoteNumber(settings, quote.date, n);
     quote.numberCommitted = true;
+    noteUsed(settings, counterKey(settings, quote.date), n);
     settings.quote.counters = settings.quote.counters || {};
     settings.quote.counters[counterKey(settings, quote.date)] = n + 1;
     return true;
+  }
+
+  /** "Q-26-1047" -> { head: "Q-26-", n: 1047 }; null if the number does not end in digits. */
+  function splitNumber(number) {
+    var m = /^(.*?)(\d+)$/.exec(String(number || ''));
+    return m ? { head: m[1], n: parseInt(m[2], 10) } : null;
+  }
+
+  /** Highest number saved for a counter on this computer (settings.quote.highest), or null. */
+  function highestUsed(settings, key) {
+    var h = parseInt(((settings.quote || {}).highest || {})[key], 10);
+    return isFinite(h) ? h : null;
+  }
+  function noteUsed(settings, key, n) {
+    var h = highestUsed(settings, key);
+    settings.quote.highest = settings.quote.highest || {};
+    if (h === null || n > h) settings.quote.highest[key] = n;
+  }
+
+  /**
+   * Set the number part of a quote's number (Quote tab box / − + buttons).
+   *   Unsaved quote: sets that year's next number (the counter), and the draft shows it.
+   *   Saved quote:   renumbers this quote only; the counter moves past it if needed, so it is never reused.
+   */
+  function setNumberPart(quote, settings, n) {
+    n = Math.max(1, Math.round(n));
+    var key = counterKey(settings, quote.date);
+    settings.quote.counters = settings.quote.counters || {};
+    if (!quote.numberCommitted) {
+      settings.quote.counters[key] = n;
+      quote.number = formatQuoteNumber(settings, quote.date, n);
+    } else {
+      var parts = splitNumber(quote.number);
+      quote.number = (parts ? parts.head : '') + n;
+      noteUsed(settings, key, n);
+      if (n >= nextNumberFor(settings, quote.date)) settings.quote.counters[key] = n + 1;
+    }
+    return quote.number;
+  }
+
+  /** Warning text if an unsaved quote would get a number already saved on this computer this year. */
+  function numberWarning(settings, isoDate, n) {
+    var h = highestUsed(settings, counterKey(settings, isoDate));
+    if (h === null || n > h) return '';
+    return 'Numbers up to ' + formatQuoteNumber(settings, isoDate, h) + ' have already been saved on this computer, so ' +
+      formatQuoteNumber(settings, isoDate, n) + ' may already be in use.';
   }
 
   /**
@@ -631,6 +678,10 @@
     normalizeQuote: normalizeQuote,
     ratesFromSettings: ratesFromSettings,
     commitNumber: commitNumber,
+    splitNumber: splitNumber,
+    setNumberPart: setNumberPart,
+    numberWarning: numberWarning,
+    highestUsed: highestUsed,
     formatQuoteNumber: formatQuoteNumber,
     nextNumberFor: nextNumberFor,
     counterKey: counterKey,

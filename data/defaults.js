@@ -8,7 +8,7 @@
  *   roundTo       optional: round the priced quantity up to this multiple (default: quantity.roundTo for sf, 1 otherwise)
  */
 window.DEFAULTS = {
-  version: 6,   // settings format; see RqbStorage.normalizeSettings for upgrades
+  version: 7,   // settings format; see RqbStorage.normalizeSettings for upgrades
   catalog: [
     {
       subject: "FRP-8'",
@@ -77,5 +77,6 @@ window.DEFAULTS = {
   // Quote numbers: prefix + 2-digit year of the quote date + number, e.g. Q-26-1001 = first quote of 2026.
   // Each year counts from startNumber again (counters: { "2026": next number for 2026, ... }).
   // includeYear: false -> one running counter ("all"), e.g. Q-1001.
-  quote: { prefix: "Q-", includeYear: true, startNumber: 1001, counters: {} }
+  // highest: { "2026": 1047 } = highest number saved per year on this computer (used to warn before reusing one).
+  quote: { prefix: "Q-", includeYear: true, startNumber: 1001, counters: {}, highest: {} }
 };

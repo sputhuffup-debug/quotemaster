@@ -215,3 +215,9 @@ table.data td.item-cell { min-width: 220px; }
 
 /* Quote tab: addenda reviewed */
 .addm-row { align-items: flex-end; margin-top: 4px; }
+
+/* Quote number: "Q-26-" + number box with − / + */
+.qnum { display: flex; align-items: center; gap: 4px; }
+.qnum-head { font-weight: 600; color: var(--muted); }
+.qnum button { min-width: 30px; font-weight: 700; }
+.warn-text, .field > span.warn-text { color: #a52020; }
