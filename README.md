@@ -46,7 +46,7 @@ These use the Mel's Drive In sample takeoff (`test/fixtures/mels-drive-in.csv`) 
 
 ![Quote tab](docs/screenshots/3-quote.png)
 
-**4. Print layouts:** the GC proposal (left) and the internal take-off (right), which shows the material/labor split, rates and take-off detail.
+**4. Print layouts:** the GC proposal (left) and the internal take-off (right), which shows the material/labor split and rates. The take-off detail follows on its own page.
 
 <table>
   <tr>
@@ -318,7 +318,9 @@ Header and fields mirror the current sheet:
 - **Grand total**
 
 Two print views from the same data:
-1. **Internal take-off**: shows the M/L split, rates, labor days, and the waste-quantity check.
+1. **Internal take-off**:
+   - **Page 1:** the M/L split, rates and labor-days summary (the labor cost/day line under the line items), with no per-line calculation rows by default. Turn those on with *Quote tab → Print options → Show calculations under each line* (default in Settings). A Total SQ typed below the takeoff is still flagged on its line.
+   - **Take-off detail:** always starts on its own page and runs onto more pages if needed, with the column headings repeated. Each Bluebeam row shows the material description it is priced as, shaded with its markup colour; the Bluebeam subtotal rows stay in CSV order.
 2. **GC proposal**: shows only line descriptions, quantities, and price (or lump sum). Hides the rates.
 
 Output = `print.css` + `window.print()` → user picks "Save as PDF". No PDF library needed.

@@ -411,7 +411,11 @@
       eq(L[2].missingRates.length, 0, 'sf/day not needed when days are entered');
       eq(pr.totals.total, 70693.33, 'Total $70,693.33');
       eq(L.filter(function (l) { return l.qtyBelowTakeoff; }).length, 0, 'nothing below takeoff');
-      ok(/9 days \(entered\)/.test(Quote.render(q, pr, s, 'internal')), 'internal take-off shows entered days');
+      ok(!/doc-calc/.test(Quote.render(q, pr, s, 'internal')), 'calculation rows off by default');
+      ok(/\$1,660\.00<\/strong>/.test(Quote.render(q, pr, s, 'internal')), 'labor cost/day summary still shown');
+      q.internal.showCalc = true;
+      ok(/9 days \(entered\)/.test(Quote.render(q, pr, s, 'internal')), 'with calculations on: entered days shown');
+      q.internal.showCalc = false;
     });
 
     group('Pricing — default scope count');
@@ -603,9 +607,17 @@
       eq(L[0].color, '#00FF00', 'most common colour wins');
       eq(L[1].color, null, 'no colour -> none');
       var internal = Quote.render(q, pr, s, 'internal');
-      ok(/<tbody class="doc-line" style="background:#FFFF8C">/.test(internal), 'internal take-off lines shaded');
+      ok(/<tbody class="doc-line[^"]*" style="background:#FFFF8C">/.test(internal), 'internal take-off lines shaded');
       ok(/<tr style="background:#C6FF8C">/.test(internal), 'take-off detail rows shaded');
       ok(!/background:#/.test(Quote.render(q, pr, s, 'proposal')), 'GC proposal stays plain');
+      var detail = internal.slice(internal.indexOf('<section class="doc-takeoff">'));
+      ok(detail.length > 100, 'take-off detail section present');
+      ok(/<th>Material<\/th>/.test(detail), 'Material column');
+      eq((detail.match(/FRP-CLASS C MARLITE S100 S2S WHITE SMOOTH PVC TRIM/g) || []).length, 26, 'material description on every one of the 26 rows');
+      var iFrp = detail.indexOf('104-FRP-10&#39; (2)'), iMar = detail.indexOf('126-MARLITE-4&#39; (15)');
+      ok(iFrp > 0 && iFrp < iMar && iMar < detail.indexOf('SALES'), 'subtotal rows in CSV order');
+      ok(/Take-off detail<\/h2>/.test(detail) && /Q-1001/.test(detail), 'own heading with quote #');
+      ok(!/doc-takeoff/.test(Quote.render(q, pr, s, 'proposal')), 'not on the GC proposal');
     });
 
     group('Pricing — Total SQ vs takeoff');
@@ -619,7 +631,10 @@
       var pr = Pricing.price(q, fixture().rows);
       eq(pr.lines[0].qtyBelowTakeoff, true, '2,100 < 2,184 flagged');
       ok(pr.warnings.some(function (w) { return w.code === 'qtybelow' && /2,100/.test(w.message) && /2,184/.test(w.message); }), 'warning names both numbers');
-      ok(/BELOW TAKEOFF/.test(Quote.render(q, pr, s, 'internal')), 'flagged on the internal take-off');
+      ok(/below takeoff \(2,184\)/.test(Quote.render(q, pr, s, 'internal')), 'flagged on the internal take-off (calculations off)');
+      q.internal.showCalc = true;
+      ok(/BELOW TAKEOFF/.test(Quote.render(q, pr, s, 'internal')), 'flagged in the calculation row (calculations on)');
+      q.internal.showCalc = false;
       ok(!/BELOW TAKEOFF/.test(Quote.render(q, pr, s, 'proposal')), 'never on the GC proposal');
       q.lineOverrides[l.key] = { qty: '2184' };
       eq(Pricing.price(q, fixture().rows).lines[0].qtyBelowTakeoff, false, 'equal is fine');

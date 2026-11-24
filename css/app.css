@@ -197,3 +197,7 @@ table.data td.item-cell { min-width: 220px; }
 .scope-edit select { width: auto !important; padding: 5px 4px; }
 .scope-preview { font-size: 12px; font-weight: 600; margin-top: 3px; white-space: nowrap; }
 .scope-preview.typed { color: #7a5200; }
+
+/* Preview: the take-off detail prints on its own page; show where the page breaks */
+.preview .doc .doc-takeoff { margin-top: 48px; padding-top: 28px; border-top: 2px dashed #8a919c; position: relative; }
+.preview .doc .doc-takeoff::before { content: "new page"; position: absolute; top: -11px; left: 50%; transform: translateX(-50%); background: #fff; color: #8a919c; font: 600 11px/20px system-ui, sans-serif; padding: 0 8px; text-transform: uppercase; letter-spacing: .08em; }
