@@ -243,7 +243,7 @@
           legacyKey: item.subject + '|' + hKey + roomKey,   // key format before per-subject lines
           item: item, unit: unit, subject: subject, height: unit === 'sf' ? height : null,
           room: quote.groupByRoom ? (room || '') : null,
-          rowIds: [], rooms: [], rawQty: 0, hasQty: false, manual: false
+          rowIds: [], rooms: [], colors: {}, rawQty: 0, hasQty: false, manual: false
         };
         order.push(key);
       }
@@ -278,6 +278,8 @@
       g.hasQty = true;
       var roomName = row.room || row.space;
       if (roomName && g.rooms.indexOf(roomName) === -1) g.rooms.push(roomName);
+      var hex = U.normHex(row.color);
+      if (hex) g.colors[hex] = (g.colors[hex] || 0) + 1;
     });
 
     // Manual lines (added on the Pricing screen, not from the takeoff)
@@ -331,6 +333,8 @@
         unit: unit,
         unitFromCsv: !sameUnit,
         rowIds: g.rowIds,
+        // Bluebeam markup colour of the line: the most common one among its markups (null if none).
+        color: Object.keys(g.colors || {}).sort(function (a, b) { return g.colors[b] - g.colors[a]; })[0] || null,
         rowCount: g.rowIds.length,
         rooms: g.rooms,
         room: g.room,

@@ -118,7 +118,35 @@
     return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
   }
 
+  /** "#ffff00" / "FF0" / "#80FFFF00" (alpha first) -> "#FFFF00", anything else -> null */
+  function normHex(c) {
+    var m = /^#?([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(String(c || '').trim());
+    if (!m) return null;
+    var h = m[1];
+    if (h.length === 3) h = h.replace(/./g, '$&$&');
+    if (h.length === 8) h = h.slice(2);
+    return '#' + h.toUpperCase();
+  }
+
+  /**
+   * A markup colour lightened toward white so black text stays readable:
+   * #FFFF00 -> #FFFF8C (light yellow), #0000FF -> #8C8CFF.  strength 0..1 (default 0.45).
+   */
+  function tint(c, strength) {
+    var h = normHex(c);
+    if (!h) return null;
+    var a = strength === undefined ? 0.45 : strength;
+    var out = '#';
+    for (var i = 1; i < 7; i += 2) {
+      var v = Math.round(255 - (255 - parseInt(h.substr(i, 2), 16)) * a);
+      out += (v < 16 ? '0' : '') + v.toString(16).toUpperCase();
+    }
+    return out;
+  }
+
   global.Units = {
+    normHex: normHex,
+    tint: tint,
     parseNumber: parseNumber,
     parseFeet: parseFeet,
     formatFeet: formatFeet,
