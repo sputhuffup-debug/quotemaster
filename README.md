@@ -336,6 +336,19 @@ Output = `print.css` + `window.print()` → user picks "Save as PDF". No PDF lib
   - **Logo style** switches between the two.
 - Browsers that had no company details saved get the letterhead automatically (settings `version: 3`). Details someone entered are kept.
 
+**Alternates** (Pricing tab → Alternates). These are options for the GC that are **not included in the base bid**:
+- **Added scope:** an extra line priced like the others: catalog item, qty, height, $/unit, units/day (or labor days). It is always an ADD.
+  - Example: 400 sf at $2.85 / 320 sf/day = ADD $3,120.00.
+- **VE swap:** pick a base line and change only what differs (qty, $/unit, units/day or labor days). The difference from the base line is the ADD or DEDUCT.
+  - Example: $2.85 → $2.00/sf on 2,200 sf = DEDUCT ($1,870.00).
+- **Lump sum:** type ADD or DEDUCT and an amount.
+
+On the GC proposal the total becomes **Base bid**, followed by an underlined **ALTERNATES (not included in base bid)** section: `ADD ALTERNATE #1 … ADD $3,120.00`, `DEDUCT ALTERNATE #2 … DEDUCT ($1,870.00)`, numbered in one running sequence.
+- The internal take-off adds each alternate's material/labor difference and what was changed.
+- Incomplete alternates are flagged, and printing asks for confirmation.
+- Sales tax, if set, applies to an alternate's material difference.
+- Alternates are saved with the quote.
+
 ## 6. Screens
 
 1. **Import:** drag-drop a CSV, then show the parsed table with subtotal rows greyed out, warnings (unmapped subject, subtotal mismatch, blank quantity), and a mapping dropdown for any unmapped Subject (remembered in settings).

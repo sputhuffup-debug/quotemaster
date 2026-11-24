@@ -620,6 +620,85 @@
       ok(!/doc-takeoff/.test(Quote.render(q, pr, s, 'proposal')), 'not on the GC proposal');
     });
 
+    group('Alternates (add scope / value engineering)');
+    test('added scope, VE swap and lump sum', function () {
+      var s = freshSettings();                 // catalog rates $2.85/sf, 320 sf/day; Mel's: 2,200 sf, $1,584/day
+      var q = newQ(s);
+      var key = Pricing.price(q, fixture().rows).lines[0].key;
+      q.alternates = [
+        { id: 'a1', kind: 'line', title: "(1) ROOM @ 8' AFF - FRP AT DISH ROOM", catalogSubject: "FRP-8'", qty: '400', height: "8'" },
+        { id: 'a2', kind: 'swap', title: 'VE: CLASS C IN LIEU OF CLASS A', lineKey: key, materialRate: '2.00' },
+        { id: 'a3', kind: 'lump', title: 'REMOVE EXISTING TILE', direction: 'add', amount: '2,500' },
+        { id: 'a4', kind: 'lump', title: 'OWNER SUPPLIES TRIM', direction: 'deduct', amount: '500' }
+      ];
+      var pr = Pricing.price(q, fixture().rows);
+      eq(pr.totals.total, 17160, 'base bid unchanged');
+      var A = pr.alternates;
+      eq(A.length, 4, 'four alternates');
+      eq(A[0].material, 1140, 'added scope material 400 × 2.85');
+      eq(A[0].labor, 1980, 'labor 400 ÷ 320 × 1,584');
+      eq(A[0].direction + ' ' + A[0].amount, 'add 3120', 'ADD $3,120.00');
+      eq(A[0].linealFt, 50, 'lineal ft 400 ÷ 8');
+      eq(A[1].material, -1870, 'swap material 2,200 × (2.00 − 2.85)');
+      eq(A[1].labor, 0, 'labor unchanged');
+      eq(A[1].direction + ' ' + A[1].amount, 'deduct 1870', 'DEDUCT ($1,870.00)');
+      eq(A[2].direction + ' ' + A[2].amount, 'add 2500', 'lump ADD $2,500.00');
+      eq(A[3].direction + ' ' + A[3].amount, 'deduct 500', 'lump DEDUCT ($500.00)');
+      eq(A.map(function (a) { return a.number; }).join(','), '1,2,3,4', 'one running number');
+      var doc = Quote.render(q, pr, s, 'proposal');
+      ok(/>Base bid<\/th>/.test(doc), 'total labelled Base bid');
+      ok(/ADD ALTERNATE #1/.test(doc) && /DEDUCT ALTERNATE #2/.test(doc) && /ADD ALTERNATE #3/.test(doc) && /DEDUCT ALTERNATE #4/.test(doc), 'ADD / DEDUCT ALTERNATE #n');
+      ok(/ADD \$3,120\.00/.test(doc) && /DEDUCT \(\$1,870\.00\)/.test(doc), 'prices printed ADD $ / DEDUCT ($)');
+      ok(/not included in base bid/.test(doc), 'section note');
+      ok(!/doc-flag/.test(doc), 'no internal flags on the proposal');
+      var internal = Quote.render(q, pr, s, 'internal');
+      ok(/material \$2\.85 → \$2\.00\/sf/.test(internal), 'internal take-off shows what the swap changed');
+      ok(/\(\$1,870\.00\)/.test(internal), 'internal shows the M difference');
+      q.alternates = [];
+      ok(/>Total<\/th>/.test(Quote.render(q, Pricing.price(q, fixture().rows), s, 'proposal')), 'no alternates -> plain Total');
+    });
+    test('VE swap: quantity and labor changes', function () {
+      var s = freshSettings();
+      var q = newQ(s);
+      var key = Pricing.price(q, fixture().rows).lines[0].key;
+      q.alternates = [{ id: 'a', kind: 'swap', lineKey: key, qty: '2000' }];
+      var a = Pricing.price(q, fixture().rows).alternates[0];
+      eq(a.material, -570, 'material 2,000 × 2.85 − 6,270');
+      eq(a.labor, -990, 'labor 2,000 ÷ 320 × 1,584 − 10,890');
+      eq(a.signed, -1560, 'DEDUCT ($1,560.00)');
+      q.alternates[0] = { id: 'a', kind: 'swap', lineKey: key, unitsPerDay: '400' };
+      eq(Pricing.price(q, fixture().rows).alternates[0].labor, Units.roundMoney(2200 / 400 * 1584) - 10890, 'faster install -> labor deduct');
+      q.alternates[0] = { id: 'a', kind: 'swap', lineKey: key, laborDays: '5' };
+      eq(Pricing.price(q, fixture().rows).alternates[0].labor, 5 * 1584 - 10890, 'labor days typed');
+      q.alternates[0] = { id: 'a', kind: 'swap', lineKey: key, materialRate: '3.50' };
+      eq(Pricing.price(q, fixture().rows).alternates[0].direction, 'add', 'more expensive swap -> ADD');
+    });
+    test('incomplete alternates are flagged', function () {
+      var s = RqbStorage.normalizeSettings(null);   // manual rate entry
+      var q = newQ(s);
+      q.alternates = [
+        { id: 'a', kind: 'line', catalogSubject: "FRP-8'", qty: '' },
+        { id: 'b', kind: 'swap', lineKey: 'nope' },
+        { id: 'c', kind: 'lump', direction: 'add', amount: '' }
+      ];
+      var pr = Pricing.price(q, fixture().rows);
+      eq(pr.totals.alternatesIncomplete, 3, 'three incomplete');
+      ok(pr.alternates[0].missing.join() === 'quantity,material $/sf,sf/day', 'line needs qty and rates');
+      eq(pr.alternates[1].missing.join(), 'base line', 'swap needs a base line');
+      eq(pr.alternates[2].missing.join(), 'amount', 'lump needs an amount');
+      ok(pr.warnings.filter(function (w) { return w.code === 'altincomplete'; }).length === 3, 'warnings');
+      ok(/INCOMPLETE: enter quantity/.test(Quote.render(q, pr, s, 'internal')), 'flagged on the internal take-off');
+    });
+    test('alternates are saved with the quote', function () {
+      var s = freshSettings();
+      var q = newQ(s);
+      q.alternates = [{ id: 'x', kind: 'lump', title: 'T', direction: 'deduct', amount: '100' }];
+      var q2 = Quote.fromFile(JSON.parse(JSON.stringify(Quote.toFile(q))), s);
+      eq(Pricing.price(q2, fixture().rows).alternates[0].signed, -100, 'reopened with its alternate');
+      var old = Quote.newQuote(s); delete old.alternates;
+      eq(Quote.fromFile({ kind: Quote.FILE_KIND, quote: JSON.parse(JSON.stringify(old)) }, s).alternates.length, 0, 'older quotes get an empty list');
+    });
+
     group('Pricing — Total SQ vs takeoff');
     test('no rounding by default; typed Total SQ below takeoff is flagged', function () {
       var s = RqbStorage.normalizeSettings(null);

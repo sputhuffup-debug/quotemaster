@@ -444,7 +444,7 @@
       warnings.unshift({ level: 'warn', code: 'unmapped', subject: s, message: 'Subject "' + s + '" (' + unmapped[s].rows + ' row' + (unmapped[s].rows === 1 ? '' : 's') + ') is not mapped to a catalog item and is not priced.' });
     });
 
-    return {
+    var result = {
       lines: lines,
       totals: totals,
       dayRate: dr,
@@ -454,9 +454,114 @@
       ignored: ignored,
       warnings: warnings
     };
+    // Alternates are priced separately and never change the base bid totals.
+    result.alternates = priceAlternates(quote, result);
+    totals.alternatesIncomplete = 0;
+    result.alternates.forEach(function (a) {
+      if (!a.missing.length) return;
+      totals.alternatesIncomplete++;
+      warnings.push({ level: 'warn', code: 'altincomplete', altId: a.id,
+        message: 'Alternate #' + a.number + (a.title ? ' (' + a.title + ')' : '') + ': enter ' + a.missing.join(', ') + '.' });
+    });
+    return result;
+  }
+
+  /*
+   * Alternates: options listed for the GC that are NOT in the base bid.
+   *   kind "line": added scope priced like a normal line (catalog item, qty, $/unit, units/day or days) -> ADD
+   *   kind "swap": value engineering on a base line: change its $/unit, units/day, days or qty;
+   *                the difference from the base line is the ADD or DEDUCT
+   *   kind "lump": a typed amount, ADD or DEDUCT
+   * Numbered #1, #2 ... in list order ("ADD ALTERNATE #1", "DEDUCT ALTERNATE #2").
+   */
+  function priceAlternates(quote, priced) {
+    var rates = quote.rates || {};
+    var catalog = (rates.catalog || []).map(normalizeCatalogItem);
+    var manualRates = rates.rateEntry !== 'catalog';
+    var labor = rates.labor || {};
+    var dr = priced.dayRate;
+    var taxPct = num(quote.taxPct, 0);
+    var lineByKey = {};
+    priced.lines.forEach(function (l) { lineByKey[l.key] = l; });
+    function n(v) { return v === undefined || v === null || String(v).trim() === '' ? null : U.parseNumber(v); }
+
+    return (quote.alternates || []).map(function (a, i) {
+      var r = { id: a.id, number: i + 1, kind: a.kind, title: String(a.title || '').trim(), missing: [], material: 0, labor: 0 };
+      if (a.kind === 'lump') {
+        var amt = n(a.amount);
+        if (amt === null) r.missing.push('amount');
+        r.signed = U.roundMoney((a.direction === 'deduct' ? -1 : 1) * Math.abs(amt || 0));
+        r.description = '';
+      } else if (a.kind === 'line') {
+        var item = findCatalogItem(catalog, a.catalogSubject);
+        if (!item) {
+          r.missing.push('catalog item');
+          r.signed = 0;
+        } else {
+          var qty = n(a.qty);
+          var mr = n(a.materialRate);
+          var upd = n(a.unitsPerDay);
+          var days = n(a.laborDays);
+          if (!manualRates) { if (mr === null) mr = item.materialRate; if (upd === null) upd = item.unitsPerDay; }
+          if (qty === null) r.missing.push('quantity');
+          if (mr === null) r.missing.push('material $/' + item.unit);
+          if (upd === null && days === null) r.missing.push(item.unit + '/day');
+          r.unit = item.unit;
+          r.qty = qty || 0;
+          r.height = item.unit === 'sf' ? U.parseFeet(a.height) : null;
+          r.linealFt = item.unit === 'sf' ? (r.height ? Math.ceil(r.qty / r.height - 1e-9) : null) : (item.unit === 'lf' ? r.qty : null);
+          r.description = item.description || item.subject;
+          r.materialRate = mr; r.unitsPerDay = upd;
+          r.laborDays = days !== null ? days : (upd > 0 ? U.roundDays(r.qty / upd, labor.dayRounding) : 0);
+          r.laborDaysEntered = days !== null;
+          r.material = U.roundMoney(r.qty * (mr || 0));
+          r.labor = U.roundMoney(r.laborDays * dr);
+          r.signed = U.roundMoney(r.material + r.labor);
+        }
+      } else {   // swap
+        var base = lineByKey[a.lineKey];
+        if (!base || base.excluded) {
+          r.missing.push('base line');
+          r.signed = 0;
+          r.description = '';
+        } else {
+          r.baseLine = base;
+          r.unit = base.unit;
+          r.description = base.description;
+          var q2 = n(a.qty); var m2 = n(a.materialRate); var u2 = n(a.unitsPerDay); var d2 = n(a.laborDays);
+          r.qty = q2 !== null ? q2 : base.qty;
+          r.materialRate = m2 !== null ? m2 : base.materialRate;
+          r.unitsPerDay = u2 !== null ? u2 : base.unitsPerDay;
+          if (d2 !== null) r.laborDays = d2;
+          else if (u2 === null && q2 === null) r.laborDays = base.laborDays;   // labor unchanged
+          else r.laborDays = r.unitsPerDay > 0 ? U.roundDays(r.qty / r.unitsPerDay, labor.dayRounding) : 0;
+          r.laborDaysEntered = d2 !== null;
+          if (r.materialRate === null) r.missing.push('material $');
+          var altMaterial = U.roundMoney(r.qty * (r.materialRate || 0));
+          var altLabor = U.roundMoney(r.laborDays * dr);
+          r.material = U.roundMoney(altMaterial - base.material);   // differences from the base line
+          r.labor = U.roundMoney(altLabor - base.labor);
+          r.signed = U.roundMoney(r.material + r.labor);
+          r.changes = [];
+          if (q2 !== null) r.changes.push('qty ' + U.formatNumber(base.qty, 2) + ' → ' + U.formatNumber(r.qty, 2));
+          if (m2 !== null) r.changes.push('material ' + U.formatMoney(base.materialRate) + ' → ' + U.formatMoney(r.materialRate) + '/' + base.unit);
+          if (u2 !== null) r.changes.push(base.unit + '/day ' + U.formatNumber(base.unitsPerDay, 2) + ' → ' + U.formatNumber(r.unitsPerDay, 2));
+          if (d2 !== null) r.changes.push('labor days ' + U.formatNumber(base.laborDays, 3) + ' → ' + U.formatNumber(d2, 3));
+        }
+      }
+      if (taxPct && r.material) {
+        r.tax = U.roundMoney(r.material * taxPct / 100);
+        r.signed = U.roundMoney(r.signed + r.tax);
+      }
+      r.direction = r.signed < 0 ? 'deduct' : 'add';
+      if (a.kind === 'lump' && a.direction === 'deduct') r.direction = 'deduct';
+      r.amount = Math.abs(r.signed);
+      return r;
+    });
   }
 
   global.Pricing = {
+    priceAlternates: priceAlternates,
     NOUNS: NOUNS,
     IGNORE: IGNORE,
     price: price,

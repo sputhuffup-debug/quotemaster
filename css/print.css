@@ -50,6 +50,13 @@
 .doc-totals td { text-align: right; padding: 3px 0; font-variant-numeric: tabular-nums; }
 .doc-totals tr.doc-grand th, .doc-totals tr.doc-grand td { border-top: 2px solid #000; font-size: 12pt; font-weight: 700; padding-top: 6px; }
 
+/* Alternates under the base bid total */
+.doc-alts { margin-top: 16px; break-inside: avoid; }
+.doc-alts .doc-label .doc-section { text-decoration: underline; text-underline-offset: 2px; }
+.doc-alt-table td { vertical-align: top; }
+.doc-alt-name { white-space: nowrap; font-weight: 700; }
+.doc-alt-title { font-weight: 600; }
+
 .doc-fine { font-size: 8.5pt; color: #333; margin-top: 16px; }
 .doc-sign { display: grid; grid-template-columns: 2fr 1fr 2fr; gap: 24px; margin-top: 36px; font-size: 8.5pt; color: #333; break-inside: avoid; }
 .doc-sign-line { border-bottom: 1px solid #000; height: 28px; margin-bottom: 3px; }
