@@ -242,7 +242,7 @@
       }
       if (l.rooms.length) detail.push('Rooms: ' + l.rooms.map(esc).join(', '));
       return '' +
-        '<tbody class="doc-line">' +
+        '<tbody class="doc-line"' + (U.tint(l.color) ? ' style="background:' + U.tint(l.color) + '"' : '') + '>' +
         '<tr>' +
           '<td class="doc-scope-label">' + scopeLabelHtml(l.scopeLabel) + '</td>' +
           '<td>' + esc(l.description) + (l.code ? '<div class="doc-code">' + esc(l.code) + '</div>' : '') + '</td>' +
@@ -294,7 +294,8 @@
     var rows = src.rows.map(function (r) {
       var excluded = quote.excludedRows[r.id];
       var l = lineByRow[r.id];
-      return '<tr' + (excluded || !l ? ' class="doc-muted"' : '') + '>' +
+      var rowBg = U.tint(r.color);
+      return '<tr' + (excluded || !l ? ' class="doc-muted"' : '') + (rowBg ? ' style="background:' + rowBg + '"' : '') + '>' +
         '<td>' + esc(r.subject) + '</td><td>' + esc(r.room || r.space) + '</td><td class="num">' + esc(r.page) + '</td>' +
         '<td class="num">' + U.formatNumber(r.measurement, 2) + '</td>' +
         '<td class="num">' + esc(r.installHeightText) + '</td>' +

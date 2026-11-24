@@ -200,6 +200,9 @@ Labor days are **not** rounded in the current sheet (6.875 days). Make rounding 
   - Hours/day and per diem + vehicle are separate settings that don't depend on the area.
   - An area whose rate is blank flags the quote as incomplete.
   - Quotes saved before this change keep the one rate they were priced with. Saved settings holding the old single $148 default become $140 Local / $148 Bay Area; a rate someone set themselves is kept as Local.
+- **Markup colours:** each row is shaded with its Bluebeam markup colour from the `Color` column (e.g. `#FFFF00`), lightened so text stays readable (yellow → light yellow).
+  - This applies to takeoff rows on the Import tab, line items on the Pricing tab (the most common colour among the line's markups), and the internal take-off.
+  - The GC proposal is never shaded. Rows without a colour stay white.
 - **Labor by days:** a line's Labor days can be typed instead of being calculated from sf/day. Example: the Vons custom Symmetrix line is 9 days × the day rate. Clearing it goes back to sf/day.
 - **Per-quote overrides:** each quote stores a snapshot of the catalog, labor and quantity settings. Any line can override its Total SQ, height, $/unit, units/day or labor days. Blank means automatic.
 - **Scope of work label:** built as `(count) TYPE @ height' AFF note`, matching the Excel sheets: `(3) ROOMS @ 8' AFF`, `(6) AREAS @ 10' AFF`, `(7) AREAS @ 10' AFF o/ CMU`, `(4) SOFFITS @ 2'`.

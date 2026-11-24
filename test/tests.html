@@ -576,6 +576,38 @@
       ok(Array.isArray(q.rates.bayAreaCities) && q.rates.bayAreaCities.length > 90, 'city list filled in');
     });
 
+    group('Markup colours');
+    test('hex parsing and tint', function () {
+      eq(Units.normHex('#ffff00'), '#FFFF00', 'lower-case');
+      eq(Units.normHex('FF0'), '#FFFF00', 'short form, no #');
+      eq(Units.normHex('#80FFFF00'), '#FFFF00', 'alpha first dropped');
+      eq(Units.normHex(''), null, 'blank');
+      eq(Units.normHex('yellow'), null, 'not a hex code');
+      eq(Units.tint('#FFFF00'), '#FFFF8C', 'yellow -> light yellow');
+      eq(Units.tint('#80FF00'), '#C6FF8C', 'green -> light green');
+      eq(Units.tint('#0000FF'), '#8C8CFF', 'blue stays readable');
+      eq(Units.tint('#FFFF00', 1), '#FFFF00', 'full strength = the colour itself');
+      eq(Units.tint(null), null, 'no colour -> no tint');
+    });
+    test('line colour from its markups', function () {
+      var p = Parse.parseCsvText(window.FIXTURES['vons-1754.csv']);
+      var s = RqbStorage.normalizeSettings(null);
+      s.subjectMap = { "104-FRP-10'": "FRP-8'", "126-MARLITE-4'": "FRP-8'", "FRP-CUSTOMSYM-6'": "FRP-8'" };
+      var q = Quote.newQuote(s);
+      q.source = { rows: p.rows, subtotals: p.subtotals, warnings: [] };
+      var pr = Pricing.price(q, p.rows);
+      eq(pr.lines.map(function (l) { return l.color; }).join(','), '#FFFF00,#FFFF00,#80FF00', 'yellow, yellow, green (from the Color column)');
+      var mixed = Parse.parseCsvText("Subject,Color,Page Index,Install Height,Waste Sq FT.\nW,#FF0000,1,8',1\nW,#00FF00,1,8',1\nW,#00FF00,2,8',1\nV,,1,8',1\n");
+      s.subjectMap.W = "FRP-8'"; s.subjectMap.V = "FRP-8'";
+      var L = Pricing.price(Quote.newQuote(s), mixed.rows).lines;
+      eq(L[0].color, '#00FF00', 'most common colour wins');
+      eq(L[1].color, null, 'no colour -> none');
+      var internal = Quote.render(q, pr, s, 'internal');
+      ok(/<tbody class="doc-line" style="background:#FFFF8C">/.test(internal), 'internal take-off lines shaded');
+      ok(/<tr style="background:#C6FF8C">/.test(internal), 'take-off detail rows shaded');
+      ok(!/background:#/.test(Quote.render(q, pr, s, 'proposal')), 'GC proposal stays plain');
+    });
+
     group('Pricing — Total SQ vs takeoff');
     test('no rounding by default; typed Total SQ below takeoff is flagged', function () {
       var s = RqbStorage.normalizeSettings(null);

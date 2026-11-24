@@ -291,8 +291,11 @@
         tot.m += r.measurement || 0; tot.sf += r.sqFt || 0; tot.w += r.wasteSqFt || 0;
       }
       var status = excluded ? 'Excluded' : res.ignored ? 'Ignored' : res.unmapped ? 'Not mapped' : l ? esc(l.catalogSubject) : 'No quantity';
-      var color = /^#[0-9a-f]{3,8}$/i.test(r.color) ? '<span class="swatch" style="background:' + r.color + '"></span>' : '';
-      return '<tr class="' + (excluded ? 'excluded' : (res.unmapped ? 'unmapped' : '')) + '">' +
+      var hex = U.normHex(r.color);
+      var color = hex ? '<span class="swatch" style="background:' + hex + '"></span>' : '';
+      var tintBg = U.tint(hex);
+      return '<tr class="' + (excluded ? 'excluded' : (res.unmapped ? 'unmapped' : '')) + '"' +
+        (tintBg ? ' style="background:' + tintBg + '" title="Markup colour ' + hex + '"' : '') + '>' +
         '<td><input type="checkbox" id="row-' + esc(r.id) + '" data-row="' + esc(r.id) + '"' + (excluded ? '' : ' checked') + ' title="Include this markup"></td>' +
         '<td>' + color + esc(r.subject) + '</td>' +
         '<td>' + esc(r.room || r.space) + '</td>' +
@@ -432,7 +435,8 @@
         return numInput(id, has ? ov.rooms : '', attrs + ' placeholder="' + (need ? '#' : '') + '" class="num' + (need ? ' required' : '') + '"' +
           ' title="How many rooms / areas / soffits, for the scope of work: (3) ROOMS @ 8\' AFF"');
       }
-      return '<tr class="' + (l.excluded ? 'excluded' : '') + '">' +
+      var lineBg = U.tint(l.color);
+      return '<tr class="' + (l.excluded ? 'excluded' : '') + '"' + (lineBg ? ' style="background:' + lineBg + '" title="Bluebeam markup colour ' + l.color + '"' : '') + '>' +
         '<td><input type="checkbox" id="ln-x-' + i + '" data-line="' + esc(l.key) + '" data-ov="excluded"' + (l.excluded ? '' : ' checked') + ' title="Include on quote"></td>' +
         '<td class="scope-cell"><div class="scope-edit">' + roomsInput(l, ov, 'ln-rooms-' + i) +
           '<select id="ln-noun-' + i + '" data-line="' + esc(l.key) + '" data-ov="roomNoun" title="What is being counted">' +
