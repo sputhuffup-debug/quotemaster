@@ -69,5 +69,8 @@ window.DEFAULTS = {
   },
   terms: { validDays: 30, notes: ["No Spec"], taxPct: 0 },
   proposal: { showSplit: false, lumpSum: false, showUnitQty: true },
+  // Internal take-off: per-line calculation rows (takeoff → qty, material ×, labor ÷) are off by default;
+  // the labor cost/day summary under the line items covers them.
+  internal: { showCalc: false },
   quote: { nextNumber: 1001, prefix: "Q-" }
 };

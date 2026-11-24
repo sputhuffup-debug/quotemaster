@@ -1,7 +1,7 @@
 /* print.css — the quote document.  Used by the on-screen preview and by Print → Save as PDF. */
 
 .doc { color: #000; font: 10pt/1.35 "Segoe UI", Arial, sans-serif; }
-.doc h1 { font-size: 16pt; margin: 0 0 6px; letter-spacing: .03em; text-align: right; }
+.doc h1 { font-size: 16pt; margin: 0 0 6px; letter-spacing: .03em; text-align: right; white-space: nowrap; }
 .doc .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .doc-strong { font-weight: 700; }
 .doc-label { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #444; margin: 0 0 3px; }
@@ -10,7 +10,7 @@
 .doc-company { display: flex; gap: 12px; align-items: flex-start; }
 .doc-logo { max-height: 70px; max-width: 200px; }
 .doc-company-banner { flex-direction: column; gap: 4px; }
-.doc-banner { display: block; width: 4.4in; max-width: 100%; height: auto; }
+.doc-banner { display: block; width: 3.9in; max-width: 100%; height: auto; }
 .doc-banner-contact { font-size: 9pt; padding-left: 2px; }
 .doc-company-name { font-size: 13pt; font-weight: 700; }
 .doc-title { text-align: right; }
@@ -27,6 +27,8 @@
 .doc-lines tbody.doc-line { break-inside: avoid; }
 .doc-lines tr.doc-calc td { font-size: 8pt; color: #555; padding-top: 0; border-bottom: 1px solid #999; }
 .doc-lines tbody.doc-line tr:first-child td { border-bottom: 0; }
+.doc-lines tbody.doc-line.nocalc tr td { border-bottom: 1px solid #999; }
+.doc-flag-small { font-size: 7.5pt; font-weight: 700; white-space: nowrap; }
 .doc-lines td.doc-scope-label { min-width: 1.25in; }      /* label wraps only between chunks (see scopeLabelHtml) */
 .doc-internal .doc-lines td:nth-child(2) { min-width: 1.6in; }
 .doc-code { font-size: 8pt; color: #666; }
@@ -51,7 +53,17 @@
 .doc-sign { display: grid; grid-template-columns: 2fr 1fr 2fr; gap: 24px; margin-top: 36px; font-size: 8.5pt; color: #333; break-inside: avoid; }
 .doc-sign-line { border-bottom: 1px solid #000; height: 28px; margin-bottom: 3px; }
 
-.doc-takeoff { margin-top: 20px; border-top: 1px dashed #999; padding-top: 10px; break-inside: avoid; }
+/* Take-off detail: always starts on its own page (and may run over several); headings repeat per page. */
+.doc-takeoff { break-before: page; page-break-before: always; padding-top: 4px; }
+.doc-takeoff-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; border-bottom: 2px solid #000; padding-bottom: 6px; margin-bottom: 8px; text-align: right; }
+.doc-takeoff-head h2 { margin: 0; font-size: 13pt; letter-spacing: .03em; text-transform: uppercase; text-align: left; }
+.doc-small thead { display: table-header-group; }
+/* Fixed column widths (see <colgroup>): short columns sized to their contents, Material gets ~3in. */
+.doc-takeoff .doc-small { table-layout: fixed; }
+.doc-takeoff .doc-small th, .doc-takeoff .doc-small td.num { white-space: nowrap; overflow: hidden; }
+.doc-takeoff .doc-small td:first-child, .doc-takeoff .doc-small td:last-child { font-size: 7.5pt; }
+.doc-small tr { break-inside: avoid; }
+.doc-small td em { color: #777; }
 .doc-small { width: 100%; border-collapse: collapse; font-size: 8pt; }
 .doc-small th, .doc-small td { padding: 2px 4px; border-bottom: 1px solid #ddd; text-align: left; }
 .doc-small th.num, .doc-small td.num { text-align: right; }

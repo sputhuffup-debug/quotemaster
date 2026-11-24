@@ -49,6 +49,7 @@
       validDays: settings.terms.validDays,
       taxPct: settings.terms.taxPct || 0,
       proposal: clone(settings.proposal || { showSplit: false, lumpSum: false, showUnitQty: true }),
+      internal: clone(settings.internal || { showCalc: false }),
       groupByRoom: false,
       laborZone: 'auto',     // union rate: "auto" (from the project city) | "local" | "bay"
       source: null,          // { fileName, importedAt, headers, rows, subtotals, warnings }
@@ -66,6 +67,7 @@
     out.gc = Object.assign({ name: '', attention: '' }, out.gc || {});
     out.project = Object.assign({ name: '', address: '' }, out.project || {});
     out.proposal = Object.assign({ showSplit: false, lumpSum: false, showUnitQty: true }, out.proposal || {});
+    out.internal = Object.assign({ showCalc: false }, out.internal || {});
     out.excludedRows = out.excludedRows || {};
     out.manualLines = out.manualLines || [];
     out.lineOverrides = out.lineOverrides || {};
@@ -241,19 +243,23 @@
           ' &times; ' + U.formatMoney(l.dayRate) + '/day');
       }
       if (l.rooms.length) detail.push('Rooms: ' + l.rooms.map(esc).join(', '));
+      var showCalc = !!(quote.internal && quote.internal.showCalc);
+      // Without the calculation row, still flag a Total SQ typed below the takeoff.
+      var belowFlag = !showCalc && l.qtyBelowTakeoff
+        ? '<div class="doc-flag doc-flag-small">below takeoff (' + U.formatNumber(l.rawQty, 2) + ')</div>' : '';
       return '' +
-        '<tbody class="doc-line"' + (U.tint(l.color) ? ' style="background:' + U.tint(l.color) + '"' : '') + '>' +
+        '<tbody class="doc-line' + (showCalc ? '' : ' nocalc') + '"' + (U.tint(l.color) ? ' style="background:' + U.tint(l.color) + '"' : '') + '>' +
         '<tr>' +
           '<td class="doc-scope-label">' + scopeLabelHtml(l.scopeLabel) + '</td>' +
           '<td>' + esc(l.description) + (l.code ? '<div class="doc-code">' + esc(l.code) + '</div>' : '') + '</td>' +
           '<td class="num">' + (l.linealFt !== null ? U.formatNumber(l.linealFt, l.unit === 'lf' ? 2 : 0) : '') + '</td>' +
           '<td class="num">' + (l.height ? esc(U.formatFeet(l.height)) : '') + '</td>' +
-          '<td class="num">' + qtyCell(l) + '</td>' +
+          '<td class="num">' + qtyCell(l) + belowFlag + '</td>' +
           '<td class="num">' + U.formatMoney(l.material) + '</td>' +
           '<td class="num">' + U.formatMoney(l.labor) + '</td>' +
           '<td class="num doc-strong">' + U.formatMoney(l.total) + '</td>' +
         '</tr>' +
-        '<tr class="doc-calc"><td colspan="8">' + detail.join(' &nbsp;|&nbsp; ') + '</td></tr>' +
+        (showCalc ? '<tr class="doc-calc"><td colspan="8">' + detail.join(' &nbsp;|&nbsp; ') + '</td></tr>' : '') +
         '</tbody>';
     }).join('');
 
@@ -286,36 +292,53 @@
       '</article>';
   }
 
+  /*
+   * Take-off detail: every Bluebeam row the quote is built from, with the material it is priced as.
+   * Printed on its own page(s) after the internal take-off (see .doc-takeoff in print.css).
+   */
   function renderTakeoffDetail(quote, priced) {
     var src = quote.source;
     if (!src || !src.rows || !src.rows.length) return '';
     var lineByRow = {};
     priced.lines.forEach(function (l) { l.rowIds.forEach(function (id) { lineByRow[id] = l; }); });
-    var rows = src.rows.map(function (r) {
+    var unitSuffix = { ea: ' ea', lf: ' lf' };
+    // CSV order, Bluebeam subtotal rows where they were in the export
+    var all = src.rows.concat(src.subtotals || []).slice().sort(function (a, b) { return (a.line || 0) - (b.line || 0); });
+    var body = all.map(function (r) {
+      if (r.isSubtotal) {
+        return '<tr class="doc-subtotal"><td>' + esc(r.subject) + '</td><td></td><td></td>' +
+          '<td class="num">' + U.formatNumber(r.measurement, 2) + '</td><td></td>' +
+          '<td class="num">' + U.formatNumber(r.sqFt, 2) + '</td>' +
+          '<td class="num">' + U.formatNumber(r.wasteSqFt, 2) + '</td><td>Bluebeam subtotal</td></tr>';
+      }
       var excluded = quote.excludedRows[r.id];
       var l = lineByRow[r.id];
       var rowBg = U.tint(r.color);
+      var unit = global.Parse && global.Parse.rowUnit ? global.Parse.rowUnit(r) : null;
+      var material = excluded ? '<em>Excluded</em>'
+        : (l ? esc(l.description) : '<em>Not priced</em>');
       return '<tr' + (excluded || !l ? ' class="doc-muted"' : '') + (rowBg ? ' style="background:' + rowBg + '"' : '') + '>' +
         '<td>' + esc(r.subject) + '</td><td>' + esc(r.room || r.space) + '</td><td class="num">' + esc(r.page) + '</td>' +
-        '<td class="num">' + U.formatNumber(r.measurement, 2) + '</td>' +
+        '<td class="num">' + U.formatNumber(r.measurement, 2) + (unitSuffix[unit] || '') + '</td>' +
         '<td class="num">' + esc(r.installHeightText) + '</td>' +
         '<td class="num">' + U.formatNumber(r.sqFt, 2) + '</td>' +
         '<td class="num">' + U.formatNumber(r.wasteSqFt, 2) + '</td>' +
-        '<td>' + (excluded ? 'excluded' : (l ? esc(l.catalogSubject) : 'not priced')) + '</td></tr>';
-    }).join('');
-    var subs = (src.subtotals || []).map(function (s) {
-      return '<tr class="doc-subtotal"><td>' + esc(s.subject) + '</td><td></td><td></td>' +
-        '<td class="num">' + U.formatNumber(s.measurement, 2) + '</td><td></td>' +
-        '<td class="num">' + U.formatNumber(s.sqFt, 2) + '</td>' +
-        '<td class="num">' + U.formatNumber(s.wasteSqFt, 2) + '</td><td>Bluebeam subtotal</td></tr>';
+        '<td>' + material + '</td></tr>';
     }).join('');
     var warnings = (src.warnings || []).concat(priced.warnings || []).filter(function (w) { return w.level !== 'info'; });
+    var meta = [quote.number, quote.project && quote.project.name, U.formatDateShort(quote.date)].filter(Boolean).map(esc).join(' &middot; ');
     return '' +
       '<section class="doc-takeoff">' +
-        '<div class="doc-label">Take-off detail' + (src.fileName ? ' &mdash; ' + esc(src.fileName) : '') + '</div>' +
-        '<table class="doc-small"><thead><tr><th>Subject</th><th>Room</th><th class="num">Page</th><th class="num">Length (ft)</th>' +
-        '<th class="num">Install ht</th><th class="num">SQ. FT</th><th class="num">Waste SF</th><th>Priced as</th></tr></thead>' +
-        '<tbody>' + rows + subs + '</tbody></table>' +
+        '<div class="doc-takeoff-head">' +
+          '<h2>Take-off detail</h2>' +
+          '<div>' + meta + (src.fileName ? '<div class="doc-code">' + esc(src.fileName) + '</div>' : '') + '</div>' +
+        '</div>' +
+        '<table class="doc-small">' +
+        '<colgroup><col style="width:1.3in"><col style="width:0.55in"><col style="width:0.35in"><col style="width:0.6in">' +
+        '<col style="width:0.45in"><col style="width:0.45in"><col style="width:0.55in"><col></colgroup>' +
+        '<thead><tr><th>Subject</th><th>Room</th><th class="num">Page</th><th class="num">Meas.</th>' +
+        '<th class="num">Inst. ht</th><th class="num">SQ FT</th><th class="num">Waste SF</th><th>Material</th></tr></thead>' +
+        '<tbody>' + body + '</tbody></table>' +
         (warnings.length ? '<ul class="doc-warnings">' + warnings.map(function (w) { return '<li>' + esc(w.message) + '</li>'; }).join('') + '</ul>' : '') +
       '</section>';
   }

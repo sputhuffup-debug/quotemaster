@@ -122,6 +122,7 @@
     q.validDays = fresh.validDays;
     q.notes = fresh.notes;
     q.proposal = fresh.proposal;
+    q.internal = fresh.internal;
     if (!q.numberCommitted) q.number = fresh.number;
     recompute();
     saveDraft();
@@ -543,8 +544,13 @@
         field('Notes / exclusions (one per line)', '<textarea rows="4" id="q-notes" data-q="notes">' + esc(q.notes) + '</textarea>') +
       '</div>' +
       '<div class="card">' +
-        '<h3>GC proposal options</h3>' +
+        '<h3>Print options</h3>' +
         '<div class="row">' +
+          '<span class="field"><span>Internal take-off</span></span>' +
+          '<label class="check"><input type="checkbox" id="q-calc" data-q="internal.showCalc"' + (q.internal && q.internal.showCalc ? ' checked' : '') + '> Show calculations under each line</label>' +
+        '</div>' +
+        '<div class="row" style="margin-top:8px">' +
+          '<span class="field"><span>GC proposal</span></span>' +
           '<label class="check"><input type="checkbox" id="q-lump" data-q="proposal.lumpSum"' + (q.proposal.lumpSum ? ' checked' : '') + '> Lump sum only (hide line prices)</label>' +
           '<label class="check"><input type="checkbox" id="q-split" data-q="proposal.showSplit"' + (q.proposal.showSplit ? ' checked' : '') + '> Show material / labor split</label>' +
           '<label class="check"><input type="checkbox" id="q-qty" data-q="proposal.showUnitQty"' + (q.proposal.showUnitQty !== false ? ' checked' : '') + '> Show quantities</label>' +
@@ -749,6 +755,10 @@
           field('Next quote #', numInput('s-next', s.quote.nextNumber, ' data-s="quote.nextNumber"')) +
         '</div>' +
         '<div style="margin-top:10px">' + field('Default notes / exclusions (one per line)', '<textarea rows="4" id="s-notes" data-s="terms.notes" data-lines="1">' + esc((s.terms.notes || []).join('\n')) + '</textarea>') + '</div>' +
+        '<div class="row" style="margin-top:10px">' +
+          '<span class="field"><span>Internal take-off defaults</span></span>' +
+          '<label class="check"><input type="checkbox" id="s-calc" data-s="internal.showCalc"' + (s.internal && s.internal.showCalc ? ' checked' : '') + '> Show calculations under each line</label>' +
+        '</div>' +
         '<div class="row" style="margin-top:10px">' +
           '<span class="field"><span>GC proposal defaults</span></span>' +
           '<label class="check"><input type="checkbox" id="s-lump" data-s="proposal.lumpSum"' + (s.proposal.lumpSum ? ' checked' : '') + '> Lump sum only</label>' +
