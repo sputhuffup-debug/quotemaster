@@ -982,6 +982,22 @@
       q.lineOverrides[Pricing.price(q, rows).lines[0].key] = { scope: 'OLD PER-LINE SCOPE' };   // quotes saved before this change
       ok(/OLD PER-LINE SCOPE/.test(Quote.scopeText(q, Pricing.price(q, rows))), 'older per-line scope edits still used');
     });
+    test('addenda reviewed', function () {
+      var s = freshSettings();
+      var q = newQ(s);
+      var pr = Pricing.price(q, fixture().rows);
+      eq(Quote.addendaText(q), '', 'nothing entered');
+      ok(!/Addenda reviewed/.test(Quote.render(q, pr, s, 'proposal')), 'proposal leaves the line out');
+      ok(/Addenda reviewed:<\/span> <em class="doc-flag">not entered<\/em>/.test(Quote.render(q, pr, s, 'internal')), 'internal reminds');
+      q.addendaNone = true;
+      eq(Quote.addendaText(q), 'None issued', 'no addenda issued');
+      ok(/Addenda reviewed:<\/span> <span class="doc-strong">None issued/.test(Quote.render(q, pr, s, 'proposal')), 'printed on the proposal');
+      q.addenda = [{ id: 'a', number: '1', date: '2026-10-15' }, { id: 'b', number: '#2', date: '2026-10-22' }, { id: 'c', number: 'Addendum 3', date: '' }, { id: 'd', number: '', date: '' }];
+      eq(Quote.addendaText(q), 'No. 1 (10-15-26), No. 2 (10-22-26), No. 3', 'numbers and dates; blank rows skipped; "#" / "Addendum" prefixes tidied');
+      ok(/No\. 1 \(10-15-26\), No\. 2 \(10-22-26\), No\. 3/.test(Quote.render(q, pr, s, 'internal')), 'printed on the internal take-off');
+      var q2 = Quote.fromFile(JSON.parse(JSON.stringify(Quote.toFile(q))), s);
+      eq(Quote.addendaText(q2), 'No. 1 (10-15-26), No. 2 (10-22-26), No. 3', 'saved with the quote');
+    });
     test('settings upgrade to the letterhead', function () {
       var blank = RqbStorage.normalizeSettings({ version: 2, company: { name: '', address: '', phone: '', email: '', license: '', logoDataUrl: '' } });
       eq(blank.company.logoDataUrl, 'img/universal-plastics-logo.png', 'blank company -> letterhead');

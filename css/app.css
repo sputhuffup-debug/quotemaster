@@ -212,3 +212,6 @@ table.data td.item-cell { min-width: 220px; }
 .alt-hint { flex-basis: 100%; }
 .alt-result { white-space: nowrap; font-size: 15px; color: var(--ok); }
 .alt-result.deduct { color: #a52020; }
+
+/* Quote tab: addenda reviewed */
+.addm-row { align-items: flex-end; margin-top: 4px; }

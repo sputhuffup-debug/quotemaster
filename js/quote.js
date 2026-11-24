@@ -56,6 +56,8 @@
       excludedRows: {},
       manualLines: [],
       alternates: [],        // ADD / DEDUCT alternates (not in the base bid); see Pricing.priceAlternates
+      addenda: [],           // reviewed addenda: [{ id, number, date (yyyy-mm-dd, optional) }]
+      addendaNone: false,    // "No addenda issued"
       lineOverrides: {},
       rates: ratesFromSettings(settings)
     };
@@ -72,6 +74,8 @@
     out.excludedRows = out.excludedRows || {};
     out.manualLines = out.manualLines || [];
     out.alternates = Array.isArray(out.alternates) ? out.alternates : [];
+    out.addenda = Array.isArray(out.addenda) ? out.addenda : [];
+    out.addendaNone = !!out.addendaNone;
     out.lineOverrides = out.lineOverrides || {};
     out.rates = out.rates || ratesFromSettings(settings);
     out.rates.catalog = (out.rates.catalog || []).map(global.Pricing.normalizeCatalogItem);
@@ -117,6 +121,27 @@
 
   function unitLabel(unit) {
     return { sf: 'SQ FT', lf: 'LF', ea: 'EA' }[unit] || String(unit || '').toUpperCase();
+  }
+
+  /**
+   * "No. 1 (10-15-26), No. 2 (10-22-26)" / "None issued" / "" (nothing entered).
+   */
+  function addendaText(quote) {
+    var list = (quote.addenda || []).filter(function (a) { return String(a.number || '').trim() || a.date; });
+    if (list.length) {
+      return list.map(function (a) {
+        var n = String(a.number || '').trim().replace(/^(no\.?|#|addendum)\s*/i, '');
+        return 'No. ' + (n || '?') + (a.date ? ' (' + U.formatDateShort(a.date) + ')' : '');
+      }).join(', ');
+    }
+    return quote.addendaNone ? 'None issued' : '';
+  }
+
+  function renderAddenda(quote, internal) {
+    var t = addendaText(quote);
+    if (!t && !internal) return '';
+    return '<div class="doc-addenda"><span class="doc-label">Addenda reviewed:</span> ' +
+      (t ? '<span class="doc-strong">' + esc(t) + '</span>' : '<em class="doc-flag">not entered</em>') + '</div>';
   }
 
   function notesList(quote) {
@@ -345,6 +370,7 @@
     return '' +
       '<article class="doc doc-internal">' +
         renderHeader(quote, settings, 'OFFICIAL MATERIAL TAKE-OFF') +
+        renderAddenda(quote, true) +
         (priced.totals.linesMissingRates ? '<p class="doc-alert">INCOMPLETE: ' + priced.totals.linesMissingRates + ' line' +
           (priced.totals.linesMissingRates === 1 ? ' is' : 's are') + ' missing material $ or install rate. Totals below are understated.</p>' : '') +
         '<table class="doc-lines">' +
@@ -441,6 +467,7 @@
     return '' +
       '<article class="doc doc-proposal">' +
         renderHeader(quote, settings, 'PROPOSAL') +
+        renderAddenda(quote, false) +
         '<table class="doc-lines">' +
           '<thead><tr>' + head + '</tr></thead>' +
           '<tbody>' + (body || '<tr><td colspan="' + cols + '" class="doc-empty">No line items.</td></tr>') + '</tbody>' +
@@ -472,6 +499,7 @@
     fileName: fileName,
     unitLabel: unitLabel,
     scopeText: scopeText,
+    addendaText: addendaText,
     scopeTextAuto: scopeTextAuto,
     render: render,
     esc: esc
