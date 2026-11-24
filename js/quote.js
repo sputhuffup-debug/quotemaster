@@ -4,7 +4,7 @@
 
   var U = global.Units;
   var FILE_KIND = 'revu-quote-builder/quote';
-  var FILE_VERSION = 1;
+  var FILE_VERSION = 2;   // 2: adds the read-only "summary" block (see docs/json-format.md)
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -130,8 +130,110 @@
     return true;
   }
 
+  /**
+   * Saved quote file. "quote" holds everything needed to reopen and re-price the quote; "summary" is a
+   * read-only copy of the calculated results for other programs (ignored when the file is opened).
+   */
   function toFile(quote) {
-    return { kind: FILE_KIND, version: FILE_VERSION, savedAt: new Date().toISOString(), quote: quote };
+    return {
+      kind: FILE_KIND,
+      version: FILE_VERSION,
+      savedAt: new Date().toISOString(),
+      summary: buildSummary(quote),
+      quote: quote
+    };
+  }
+
+  function round2(v) { return v === null || v === undefined || !isFinite(v) ? null : Math.round(v * 100) / 100; }
+
+  /** Calculated results, as printed: lines, totals, alternates, scope, addenda. */
+  function buildSummary(quote) {
+    var rows = quote.source && quote.source.rows ? quote.source.rows : [];
+    var priced = global.Pricing.price(quote, rows);
+    var lab = (quote.rates && quote.rates.labor) || {};
+    var t = priced.totals;
+    var area = priced.laborArea || {};
+    return {
+      note: 'Read-only results calculated by Revu Quote Builder when this file was saved. Ignored when the file is opened; edit "quote" instead.',
+      currency: 'USD',
+      quoteNumber: quote.number,
+      date: quote.date,
+      generalContractor: { name: quote.gc.name, attention: quote.gc.attention },
+      project: { name: quote.project.name, address: quote.project.address },
+      constructionType: quote.constructionType || null,
+      laborRate: {
+        area: area.zone === 'bay' ? 'bayArea' : 'local',
+        areaSource: area.mode === 'auto' ? 'projectCity' : 'pickedOnQuote',
+        city: area.city || null,
+        hourlyRate: priced.hourlyRate,
+        hoursPerDay: U.parseNumber(lab.hoursPerDay),
+        perDiemVehiclePerDay: U.parseNumber(lab.dailyAdder),
+        dayRate: round2(priced.dayRate)
+      },
+      lines: priced.lines.filter(function (l) { return !l.excluded; }).map(function (l) {
+        return {
+          key: l.key,
+          scopeOfWork: l.scopeLabel,
+          description: l.description,
+          code: l.code || null,
+          catalogItem: l.catalogSubject,
+          bluebeamSubject: l.subject || null,
+          manual: !!l.manual,
+          unit: l.unit,
+          takeoffQty: l.manual ? null : round2(l.rawQty),
+          qty: round2(l.qty),
+          qtyEnteredBelowTakeoff: !!l.qtyBelowTakeoff,
+          heightFt: l.height,
+          linealFt: l.linealFt,
+          count: l.roomCount,
+          countType: l.roomNoun,
+          materialRate: l.materialRate,
+          unitsPerDay: l.unitsPerDay,
+          laborDays: round2(l.laborDays),
+          material: l.material,
+          labor: l.labor,
+          total: l.total,
+          markupColor: l.color || null,
+          bluebeamRowIds: l.rowIds.slice()
+        };
+      }),
+      totals: {
+        material: t.material,
+        labor: t.labor,
+        laborDays: round2(t.laborDays),
+        subtotal: t.subtotal,
+        salesTaxPct: t.taxPct,
+        salesTax: t.tax,
+        baseBid: t.total
+      },
+      alternates: (priced.alternates || []).map(function (a) {
+        return {
+          number: a.number,
+          name: (a.direction === 'deduct' ? 'DEDUCT' : 'ADD') + ' ALTERNATE #' + a.number,
+          direction: a.direction,
+          kind: a.kind,
+          title: a.title,
+          description: a.description || null,
+          appliesToLine: a.kind === 'swap' && a.baseLine ? a.baseLine.key : null,
+          unit: a.unit || null,
+          qty: a.qty === undefined ? null : round2(a.qty),
+          material: a.material,
+          labor: a.labor,
+          salesTax: a.tax || 0,
+          amount: a.amount,
+          signedAmount: a.signed,
+          incomplete: a.missing.length ? a.missing.slice() : null
+        };
+      }),
+      scopeOfWork: scopeText(quote, priced),
+      notes: notesList(quote),
+      addendaReviewed: addendaText(quote) || null,
+      incomplete: {
+        linesMissingRates: t.linesMissingRates || 0,
+        linesMissingCount: t.linesMissingRooms || 0,
+        alternatesIncomplete: t.alternatesIncomplete || 0
+      }
+    };
   }
 
   function fromFile(json, settings) {
@@ -525,6 +627,8 @@
     nextNumberFor: nextNumberFor,
     counterKey: counterKey,
     toFile: toFile,
+    buildSummary: buildSummary,
+    FILE_VERSION: FILE_VERSION,
     fromFile: fromFile,
     fileName: fileName,
     unitLabel: unitLabel,
