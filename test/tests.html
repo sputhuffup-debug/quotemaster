@@ -616,7 +616,7 @@
       eq((detail.match(/FRP-CLASS C MARLITE S100 S2S WHITE SMOOTH PVC TRIM/g) || []).length, 26, 'material description on every one of the 26 rows');
       var iFrp = detail.indexOf('104-FRP-10&#39; (2)'), iMar = detail.indexOf('126-MARLITE-4&#39; (15)');
       ok(iFrp > 0 && iFrp < iMar && iMar < detail.indexOf('SALES'), 'subtotal rows in CSV order');
-      ok(/Take-off detail<\/h2>/.test(detail) && /Q-1001/.test(detail), 'own heading with quote #');
+      ok(/Take-off detail<\/h2>/.test(detail) && /Q-\d{2}-1001/.test(detail), 'own heading with quote #');
       ok(!/doc-takeoff/.test(Quote.render(q, pr, s, 'proposal')), 'not on the GC proposal');
     });
 
@@ -891,17 +891,36 @@
 
     /* ---------------- Quote ---------------- */
     group('Quote model');
-    test('numbering increments on first save only', function () {
+    test('numbering: Q-26-1001, a new counter each year', function () {
       var s = freshSettings();
-      var q = newQ(s);
-      eq(q.number, 'Q-1001', 'provisional number');
-      ok(Quote.commitNumber(q, s), 'first commit changes settings');
-      eq(q.number, 'Q-1001', 'number assigned');
-      eq(s.quote.nextNumber, 1002, 'next number bumped');
-      ok(!Quote.commitNumber(q, s), 'second save keeps number');
-      eq(s.quote.nextNumber, 1002, 'not bumped again');
-      var q2 = newQ(s);
-      eq(q2.number, 'Q-1002', 'next quote gets 1002');
+      var yy = String(new Date().getFullYear()).slice(-2);
+      var q = Quote.newQuote(s);
+      eq(q.number, 'Q-' + yy + '-1001', 'first quote of the year: Q-' + yy + '-1001');
+      ok(Quote.commitNumber(q, s), 'first save takes the number');
+      eq(q.number, 'Q-' + yy + '-1001', 'number assigned');
+      ok(!Quote.commitNumber(q, s), 'second save keeps it');
+      eq(Quote.newQuote(s).number, 'Q-' + yy + '-1002', 'next quote 1002');
+      var a = Quote.newQuote(s); a.date = '2026-12-30';
+      var b = Quote.newQuote(s); b.date = '2027-01-04';
+      var c = Quote.newQuote(s); c.date = '2027-02-01';
+      Quote.commitNumber(b, s); Quote.commitNumber(c, s); Quote.commitNumber(a, s);
+      eq(b.number, 'Q-27-1001', 'first quote of 2027 -> Q-27-1001');
+      eq(c.number, 'Q-27-1002', 'second of 2027');
+      eq(a.number, yy === '26' ? 'Q-26-1002' : 'Q-26-1001', 'a 2026-dated quote saved later continues the 2026 count (no duplicate)');
+      s.quote.startNumber = 1;
+      var d = Quote.newQuote(s); d.date = '2028-03-01'; Quote.commitNumber(d, s);
+      eq(d.number, 'Q-28-1', 'first number each year is a setting');
+      var flat = { quote: { prefix: 'Q-', includeYear: false, startNumber: 1001, counters: { all: 1003 } } };
+      eq(Quote.formatQuoteNumber(flat, '2026-05-01'), 'Q-1003', 'Include year off -> one running counter, Q-1003');
+    });
+    test('saved settings move to per-year counters', function () {
+      var yr = String(new Date().getFullYear());
+      var up = RqbStorage.normalizeSettings({ version: 4, quote: { nextNumber: 1050, prefix: 'Q-', includeYear: true } });
+      eq(up.quote.counters[yr], 1050, 'this year carries on from 1050');
+      eq(up.quote.nextNumber, undefined, 'old field removed');
+      eq(Quote.formatQuoteNumber(up, yr + '-06-01'), 'Q-' + yr.slice(-2) + '-1050', 'next number continues');
+      eq(Quote.formatQuoteNumber(up, (+yr + 1) + '-01-02'), 'Q-' + String(+yr + 1).slice(-2) + '-1001', 'next year starts at 1001');
+      eq(RqbStorage.normalizeSettings(null).quote.startNumber, 1001, 'default first number 1001');
     });
     test('save file round-trip keeps original rates', function () {
       var s = freshSettings();
@@ -1015,7 +1034,7 @@
       eq(s.labor.hoursPerDay, 8, 'missing filled from defaults');
       eq(s.catalog.length, 1, 'catalog replaced, not merged');
       eq(s.catalog[0].unitsPerDay, 100, 'legacy names upgraded');
-      eq(s.quote.nextNumber, 1001, 'quote numbering default');
+      eq(Quote.nextNumberFor(s, '2026-01-01'), 1001, 'quote numbering default');
     });
 
     /* ---------------- Price list (sync parts) ---------------- */

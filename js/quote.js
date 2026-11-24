@@ -37,9 +37,34 @@
     };
   }
 
+  /* ---------- quote numbers: Q-26-1001 ---------- */
+
+  /** Which counter a quote date uses: its year ("2026"), or "all" when the year is not in the number. */
+  function counterKey(settings, isoDate) {
+    var d = U.parseISODate(isoDate) || new Date();
+    return (settings.quote || {}).includeYear !== false ? String(d.getFullYear()) : 'all';
+  }
+
+  /** Next number for that counter: each year starts again at startNumber (1001). */
+  function nextNumberFor(settings, isoDate) {
+    var qs = settings.quote || {};
+    var c = (qs.counters || {})[counterKey(settings, isoDate)];
+    var n = parseInt(c, 10);
+    return isFinite(n) ? n : (parseInt(qs.startNumber, 10) || 1001);
+  }
+
+  /** "Q-26-1001": prefix + last two digits of the quote date's year + number. */
+  function formatQuoteNumber(settings, isoDate, n) {
+    var qs = settings.quote || {};
+    var d = U.parseISODate(isoDate) || new Date();
+    var num = n !== undefined ? n : nextNumberFor(settings, isoDate);
+    var yy = String(d.getFullYear()).slice(-2);
+    return (qs.prefix || '') + (qs.includeYear !== false ? yy + '-' : '') + num;
+  }
+
   function newQuote(settings) {
     return {
-      number: (settings.quote.prefix || '') + settings.quote.nextNumber,
+      number: formatQuoteNumber(settings, U.toISODate(new Date())),
       numberCommitted: false,
       date: U.toISODate(new Date()),
       gc: { name: '', attention: '' },
@@ -97,9 +122,11 @@
    */
   function commitNumber(quote, settings) {
     if (quote.numberCommitted) return false;
-    quote.number = (settings.quote.prefix || '') + settings.quote.nextNumber;
+    var n = nextNumberFor(settings, quote.date);
+    quote.number = formatQuoteNumber(settings, quote.date, n);
     quote.numberCommitted = true;
-    settings.quote.nextNumber = (parseInt(settings.quote.nextNumber, 10) || 0) + 1;
+    settings.quote.counters = settings.quote.counters || {};
+    settings.quote.counters[counterKey(settings, quote.date)] = n + 1;
     return true;
   }
 
@@ -494,6 +521,9 @@
     normalizeQuote: normalizeQuote,
     ratesFromSettings: ratesFromSettings,
     commitNumber: commitNumber,
+    formatQuoteNumber: formatQuoteNumber,
+    nextNumberFor: nextNumberFor,
+    counterKey: counterKey,
     toFile: toFile,
     fromFile: fromFile,
     fileName: fileName,

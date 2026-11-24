@@ -45,6 +45,18 @@
         if (inL.hourlyRate === undefined || +inL.hourlyRate === 148) out.labor.hourlyRate = global.DEFAULTS.labor.hourlyRate;
       }
     }
+    // v4 -> v5: one running nextNumber became a counter per year (Q-26-1001, Q-27-1001 ...).
+    // The current number carries on for this year, so nothing already used is handed out again.
+    var inQ = (s && s.quote) || {};
+    if (fromVersion < 5 && inQ.nextNumber !== undefined && !(inQ.counters && Object.keys(inQ.counters).length)) {
+      var nn = parseInt(inQ.nextNumber, 10);
+      if (isFinite(nn)) {
+        out.quote.counters = {};
+        out.quote.counters[String(new Date().getFullYear())] = nn;
+        out.quote.counters.all = nn;
+      }
+    }
+    delete out.quote.nextNumber;
     out.version = global.DEFAULTS.version;
     out.catalog = (out.catalog || []).map(global.Pricing.normalizeCatalogItem);
     if (!Array.isArray(out.terms.notes)) out.terms.notes = String(out.terms.notes || '').split(/\r?\n/).filter(Boolean);

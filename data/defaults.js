@@ -8,7 +8,7 @@
  *   roundTo       optional: round the priced quantity up to this multiple (default: quantity.roundTo for sf, 1 otherwise)
  */
 window.DEFAULTS = {
-  version: 4,   // settings format; see RqbStorage.normalizeSettings for upgrades
+  version: 5,   // settings format; see RqbStorage.normalizeSettings for upgrades
   catalog: [
     {
       subject: "FRP-8'",
@@ -72,5 +72,8 @@ window.DEFAULTS = {
   // Internal take-off: per-line calculation rows (takeoff → qty, material ×, labor ÷) are off by default;
   // the labor cost/day summary under the line items covers them.
   internal: { showCalc: false },
-  quote: { nextNumber: 1001, prefix: "Q-" }
+  // Quote numbers: prefix + 2-digit year of the quote date + number, e.g. Q-26-1001 = first quote of 2026.
+  // Each year counts from startNumber again (counters: { "2026": next number for 2026, ... }).
+  // includeYear: false -> one running counter ("all"), e.g. Q-1001.
+  quote: { prefix: "Q-", includeYear: true, startNumber: 1001, counters: {} }
 };
