@@ -314,6 +314,9 @@ Header and fields mirror the current sheet:
   Scope of work (e.g. `(3) ROOMS @ 8' AFF`) · Material description · Lineal Ft · Height · Total SQ · Price
 - **Scope of work** (one text box on the Quote tab, above Notes / exclusions). It starts as the catalog `scope` of each line item (each paragraph once) and can be edited freely; *Use automatic text* restores it. On both printouts it is printed in 12pt bold, the same as the Total line.
 - **Section headings** SCOPE OF WORK, CONSTRUCTION TYPE and NOTES / EXCLUSIONS are underlined on both printouts.
+- **Addenda reviewed:** entered on the Quote tab as addendum No. + optional date (*+ Add addendum* numbers them), or *No addenda issued*.
+  - Prints under To / Project on both documents, e.g. `ADDENDA REVIEWED: No. 1 (10-15-26), No. 2 (10-22-26)` or `None issued`.
+  - If nothing is entered, the GC proposal leaves the line out and the internal take-off shows "not entered".
 - **Construction type:** ☐ New Const. ☐ Remodel
 - **Notes / exclusions** (e.g. "No Spec")
 - **Grand total**

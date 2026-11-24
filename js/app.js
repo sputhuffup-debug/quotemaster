@@ -172,6 +172,31 @@
     global.scrollTo(0, scrollY);
   }
 
+  function addendaHint(q) {
+    var t = Q.addendaText(q);
+    return t ? 'Prints as: <strong>ADDENDA REVIEWED: ' + esc(t) + '</strong>'
+      : 'Nothing entered: the GC proposal leaves this line out; the internal take-off shows "not entered".';
+  }
+
+  function renderAddendaField(q) {
+    var rows = (q.addenda || []).map(function (a, i) {
+      return '<div class="row addm-row">' +
+        '<label class="alt-field"><span>Addendum No.</span>' + textInput('qa-num-' + i, a.number || '', ' data-addm="' + esc(a.id) + '" data-af="number" style="width:90px"') + '</label>' +
+        '<label class="alt-field"><span>Date (optional)</span><input type="date" id="qa-date-' + i + '" data-addm="' + esc(a.id) + '" data-af="date"' + attr('value', a.date || '') + '></label>' +
+        '<button type="button" class="small danger" data-act="addm-del" data-id="' + esc(a.id) + '" title="Remove addendum">✕</button>' +
+        '</div>';
+    }).join('');
+    return '<div class="field" style="margin-top:10px"><span>Addenda reviewed</span>' +
+      rows +
+      '<div class="row" style="margin-top:4px">' +
+        '<button type="button" class="small" data-act="addm-add">+ Add addendum</button>' +
+        '<label class="check"><input type="checkbox" id="q-addnone" data-q="addendaNone"' + (q.addendaNone ? ' checked' : '') +
+          ((q.addenda || []).length ? ' disabled title="Remove the addenda above first"' : '') + '> No addenda issued</label>' +
+      '</div>' +
+      '<span class="hint" id="q-addm-hint">' + addendaHint(q) + '</span>' +
+      '</div>';
+  }
+
   /** "San Francisco → Bay Area" / "Roseville → Local" / "no city in the address → Local" */
   function areaText(a) {
     if (!a) return '';
@@ -191,6 +216,8 @@
     renderTabs();
     var ah = $('#q-area-hint');
     if (ah) ah.innerHTML = areaHint();
+    var adh = $('#q-addm-hint');
+    if (adh) adh.innerHTML = addendaHint(state.quote);
     var prev = $('#preview');
     if (prev) prev.innerHTML = Q.render(state.quote, state.priced, state.settings, state.previewMode);
     var tot = $('#totals-bar');
@@ -614,6 +641,7 @@
           field('Project name', textInput('q-proj', q.project.name, ' data-q="project.name"')) +
           field('Project address', textInput('q-addr', q.project.address, ' data-q="project.address"') + '<span class="hint" id="q-area-hint">' + areaHint() + '</span>') +
         '</div>' +
+        renderAddendaField(q) +
         '<div class="field" style="margin-top:10px"><span>Construction type</span><div class="radio-group">' +
           ['new', 'remodel', ''].map(function (v) {
             var lbl = { 'new': 'New Const.', remodel: 'Remodel', '': 'Not specified' }[v];
@@ -1039,6 +1067,13 @@
       return;
     }
     if (t.dataset.map !== undefined) { setMapping(t.dataset.map, t.value); return; }
+    if (t.dataset.addm !== undefined) {
+      var ad = (state.quote.addenda || []).filter(function (x) { return x.id === t.dataset.addm; })[0];
+      if (!ad) return;
+      ad[t.dataset.af] = t.value;
+      changed(full ? 'full' : 'light');
+      return;
+    }
     if (t.dataset.alt !== undefined) {
       var alt = (state.quote.alternates || []).filter(function (x) { return x.id === t.dataset.alt; })[0];
       if (!alt) return;
@@ -1129,6 +1164,20 @@
         changed();
         break;
       }
+      case 'addm-add': {
+        var list = q.addenda || [];
+        var maxNo = list.reduce(function (m, x) { var v = parseInt(String(x.number || '').replace(/\D/g, ''), 10); return isFinite(v) && v > m ? v : m; }, 0);
+        q.addenda = list.concat([{ id: 'd' + Date.now().toString(36), number: String(maxNo + 1), date: '' }]);
+        q.addendaNone = false;
+        changed();
+        var dn = doc.getElementById('qa-date-' + (q.addenda.length - 1));
+        if (dn) dn.focus();
+        break;
+      }
+      case 'addm-del':
+        q.addenda = (q.addenda || []).filter(function (x) { return x.id !== b.dataset.id; });
+        changed();
+        break;
       case 'alt-add': {
         var kind = b.dataset.kind;
         var na = { id: 'a' + Date.now().toString(36) + Math.floor(Math.random() * 1e4).toString(36), kind: kind, title: '' };
