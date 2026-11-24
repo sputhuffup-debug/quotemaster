@@ -19,7 +19,7 @@ To run it, double-click `index.html`. To run the tests, double-click `test/tests
 
 ### Quick start
 
-1. **Settings** tab: the Universal Plastics letterhead and company details are filled in by default. Add a phone/email if wanted. Check the catalog and labor rates. Click **Export settings** to keep a backup.
+1. **Letterhead:** copy your letterhead image to `img/letterhead.png` (kept out of GitHub). Then open the **Settings** tab: the company details are filled in by default. Add a phone/email if wanted. Check the catalog and labor rates. Click **Export settings** to keep a backup.
 2. **Import** tab: drop the Bluebeam Markups Summary CSV. Check the subtotal check and the subject mapping.
 3. **Pricing** tab: for each line, fill in the scope of work (**count**, **type** such as ROOMS / AREAS / SOFFITS, and an optional **note** such as "o/ CMU"), then the **material $/sf** and the **install sf/day**. These build labels like "(3) ROOMS @ 8' AFF" or "(7) AREAS @ 10' AFF o/ CMU". The **Local / Bay Area** union rate is picked from the project address (Quote tab). Check it under *Labor area*. Set **Per diem + vehicle** to 0 on local jobs. These start blank, and red fields still need a value.
    - **Total SQ** starts as the Waste Sq Ft from Bluebeam, shown alongside for checking. Type your own number in Total SQ; a value below the takeoff gets a **red border**.
@@ -32,7 +32,7 @@ You can also drop a `.csv` (import) or `.json` (saved quote or settings export) 
 
 ### Screenshots
 
-These use the Mel's Drive In sample takeoff (`test/fixtures/mels-drive-in.csv`) and the Universal Plastics letterhead.
+These use the Mel's Drive In sample takeoff (`test/fixtures/mels-drive-in.csv`) and the placeholder letterhead.
 
 **1. Import:** the Bluebeam CSV is parsed, checked against its subtotal row, and each subject is mapped to a catalog item.
 
@@ -84,7 +84,8 @@ revu-quote-builder/
 │   ├── papaparse.min.js    # vendored CSV parser v5.4.1 (MIT)
 │   └── papaparse.LICENSE
 ├── img/
-│   └── universal-plastics-logo.png  # default letterhead on quotes
+│   ├── letterhead-placeholder.png   # shown when img/letterhead.png is missing
+│   └── letterhead.png               # YOUR letterhead: add locally, git-ignored (not in GitHub)
 ├── docs/
 │   ├── json-format.md      # saved quote / settings JSON reference (for other programs)
 │   ├── quote-file.schema.json
@@ -335,7 +336,10 @@ Output = `print.css` + `window.print()` → user picks "Save as PDF". No PDF lib
 ---
 
 **Company letterhead.**
-- The default logo is `img/universal-plastics-logo.png`, the full Universal Plastics letterhead with name, address and CA/NV licenses. It prints as a banner in the header, with no duplicate text block; phone/email, if entered, print under it.
+- **The letterhead is not stored in GitHub.** Quotes use `img/letterhead.png`, which `.gitignore` keeps out of the repository.
+  - On each computer, copy the company letterhead image to `img/letterhead.png` in the app folder.
+  - Until you do, quotes show `img/letterhead-placeholder.png` ("YOUR COMPANY LETTERHEAD").
+  - Alternatively, upload the image in Settings → Company; it is then stored in that browser.
 - The company name is also used on the proposal's signature line.
 - To use a different image: Settings → Company → Replace logo, or replace the file.
   - Wide images (3:1 or wider) are treated as a letterhead. Others print as a small logo beside the company details.

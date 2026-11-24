@@ -8,7 +8,7 @@
  *   roundTo       optional: round the priced quantity up to this multiple (default: quantity.roundTo for sf, 1 otherwise)
  */
 window.DEFAULTS = {
-  version: 5,   // settings format; see RqbStorage.normalizeSettings for upgrades
+  version: 6,   // settings format; see RqbStorage.normalizeSettings for upgrades
   catalog: [
     {
       subject: "FRP-8'",
@@ -64,7 +64,9 @@ window.DEFAULTS = {
     phone: "",
     email: "",
     license: "CA Lic# 390876 • NV Lic# 0006651A",
-    logoDataUrl: "img/universal-plastics-logo.png",
+    // img/letterhead.png is kept out of git (.gitignore): put the real letterhead there on each computer.
+    // If it is missing, quotes show img/letterhead-placeholder.png.
+    logoDataUrl: "img/letterhead.png",
     logoLayout: "banner"
   },
   terms: { validDays: 30, notes: ["No Spec"], taxPct: 0 },

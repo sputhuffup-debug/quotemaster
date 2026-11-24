@@ -819,7 +819,8 @@
           field('Email', textInput('s-cemail', c.email, ' data-s="company.email"')) +
           field('License #', textInput('s-clic', c.license, ' data-s="company.license"')) +
           '<div class="field"><span>Logo</span>' +
-            (c.logoDataUrl ? '<img class="logo-preview' + (c.logoLayout === 'banner' ? ' banner' : '') + '" src="' + esc(c.logoDataUrl) + '" alt="Logo">' : '') +
+            (c.logoDataUrl ? Q.logoImg('logo-preview' + (c.logoLayout === 'banner' ? ' banner' : ''), c.logoDataUrl, 'Logo') : '') +
+            (c.logoDataUrl && !/^data:/i.test(c.logoDataUrl) ? '<div class="hint">File: ' + esc(c.logoDataUrl) + ' (kept on this computer, not in GitHub). Missing? The placeholder shows instead.</div>' : '') +
             '<div class="row"><button type="button" data-act="pick-logo">' + (c.logoDataUrl ? 'Replace logo…' : 'Upload logo…') + '</button>' +
             (c.logoDataUrl ? '<button type="button" class="danger" data-act="del-logo">Remove</button>' : '') + '</div>' +
             (c.logoDataUrl ? '<label class="field" style="margin-top:6px"><span>Logo style</span><select id="s-logolayout" data-s="company.logoLayout">' +

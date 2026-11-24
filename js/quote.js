@@ -286,6 +286,14 @@
 
   /* ---------- rendering ---------- */
 
+  var LOGO_PLACEHOLDER = 'img/letterhead-placeholder.png';
+
+  /** Logo <img>; a file path that is missing (e.g. img/letterhead.png not copied yet) falls back to the placeholder. */
+  function logoImg(cls, src, alt) {
+    var fallback = /^data:/i.test(src) ? '' : ' onerror="this.onerror=null;this.src=\'' + LOGO_PLACEHOLDER + '\'"';
+    return '<img class="' + cls + '" src="' + esc(src) + '" alt="' + esc(alt || '') + '"' + fallback + '>';
+  }
+
   function renderHeader(quote, settings, title) {
     var c = settings.company || {};
     var contact = [c.phone, c.email].filter(Boolean).map(esc).join(' &middot; ');
@@ -294,10 +302,10 @@
     var license = c.license ? (/lic/i.test(c.license) ? esc(c.license) : 'Lic. ' + esc(c.license)) : '';
     // A letterhead logo already shows name, address and licenses: print only the phone / email under it.
     var company = banner
-      ? '<div class="doc-company doc-company-banner"><img class="doc-banner" src="' + esc(c.logoDataUrl) + '" alt="' + esc(c.name) + '">' +
+      ? '<div class="doc-company doc-company-banner">' + logoImg('doc-banner', c.logoDataUrl, c.name) +
           (contact ? '<div class="doc-banner-contact">' + contact + '</div>' : '') + '</div>'
       : '<div class="doc-company">' +
-          (c.logoDataUrl ? '<img class="doc-logo" src="' + esc(c.logoDataUrl) + '" alt="">' : '') +
+          (c.logoDataUrl ? logoImg('doc-logo', c.logoDataUrl, '') : '') +
           '<div>' +
             (c.name ? '<div class="doc-company-name">' + esc(c.name) + '</div>' : '') +
             (c.address ? '<div>' + escMultiline(c.address) + '</div>' : '') +
@@ -627,6 +635,7 @@
     nextNumberFor: nextNumberFor,
     counterKey: counterKey,
     toFile: toFile,
+    logoImg: logoImg,
     buildSummary: buildSummary,
     FILE_VERSION: FILE_VERSION,
     fromFile: fromFile,
