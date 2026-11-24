@@ -177,16 +177,28 @@
     return U.formatNumber(line.qty, 2) + (line.unit !== 'sf' ? ' ' + unitLabel(line.unit) : '');
   }
 
-  function renderScopeParagraphs(lines) {
+  /** Scope text built from the lines' catalog scope paragraphs (each once, blank line between). */
+  function scopeTextAuto(priced) {
     var seen = {};
     var paras = [];
-    lines.forEach(function (l) {
+    (priced.lines || []).forEach(function (l) {
+      if (l.excluded) return;
       var s = String(l.scope || '').trim();
       if (s && !seen[s]) { seen[s] = true; paras.push(s); }
     });
-    if (!paras.length) return '';
-    return '<section class="doc-scope"><div class="doc-label">Scope of work</div>' +
-      paras.map(function (p) { return '<p>' + escMultiline(p) + '</p>'; }).join('') + '</section>';
+    return paras.join('\n\n');
+  }
+
+  /** The quote's scope of work: typed on the Quote tab (quote.scopeText), else built from the lines. */
+  function scopeText(quote, priced) {
+    return typeof quote.scopeText === 'string' ? quote.scopeText : scopeTextAuto(priced);
+  }
+
+  function renderScope(quote, priced) {
+    var text = scopeText(quote, priced).trim();
+    if (!text) return '';
+    return '<section class="doc-scope"><div class="doc-label doc-section">Scope of work</div>' +
+      text.split(/\n\s*\n/).map(function (p) { return '<p>' + escMultiline(p.trim()) + '</p>'; }).join('') + '</section>';
   }
 
   function renderFooter(quote, priced, opts) {
@@ -206,12 +218,12 @@
     return '' +
       '<section class="doc-foot">' +
         '<div class="doc-foot-left">' +
-          '<div class="doc-label">Construction type</div>' +
+          '<div class="doc-label doc-section">Construction type</div>' +
           '<div class="doc-checks">' +
             '<span>' + (ct === 'new' ? '&#9746;' : '&#9744;') + ' New Const.</span>' +
             '<span>' + (ct === 'remodel' ? '&#9746;' : '&#9744;') + ' Remodel</span>' +
           '</div>' +
-          (notes.length ? '<div class="doc-label">Notes / exclusions</div><ul class="doc-notes">' +
+          (notes.length ? '<div class="doc-label doc-section">Notes / exclusions</div><ul class="doc-notes">' +
             notes.map(function (n) { return '<li>' + esc(n) + '</li>'; }).join('') + '</ul>' : '') +
         '</div>' +
         '<table class="doc-totals">' + totalsRows + '</table>' +
@@ -286,7 +298,7 @@
           (body || '<tbody><tr><td colspan="8" class="doc-empty">No priced line items.</td></tr></tbody>') +
         '</table>' +
         '<p class="doc-rates">' + rateLine + '</p>' +
-        renderScopeParagraphs(lines) +
+        renderScope(quote, priced) +
         renderFooter(quote, priced, { split: true, lumpSum: false }) +
         renderTakeoffDetail(quote, priced) +
       '</article>';
@@ -377,7 +389,7 @@
           '<thead><tr>' + head + '</tr></thead>' +
           '<tbody>' + (body || '<tr><td colspan="' + cols + '" class="doc-empty">No line items.</td></tr>') + '</tbody>' +
         '</table>' +
-        renderScopeParagraphs(lines) +
+        renderScope(quote, priced) +
         renderFooter(quote, priced, { split: split, lumpSum: lump }) +
         (quote.validDays ? '<p class="doc-fine">This proposal is valid for ' + esc(quote.validDays) + ' days from the date above.</p>' : '') +
         '<section class="doc-sign">' +
@@ -402,6 +414,8 @@
     fromFile: fromFile,
     fileName: fileName,
     unitLabel: unitLabel,
+    scopeText: scopeText,
+    scopeTextAuto: scopeTextAuto,
     render: render,
     esc: esc
   };

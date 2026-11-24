@@ -312,7 +312,8 @@ Header and fields mirror the current sheet:
 - **Project:** name (e.g. *Mel's Drive In*) + address (e.g. *2165 Lombard St, San Francisco CA, 94123*)
 - **Line items** (up to ~15, same as the template's row blocks):
   Scope of work (e.g. `(3) ROOMS @ 8' AFF`) · Material description · Lineal Ft · Height · Total SQ · Price
-- **Scope paragraph** (from the catalog `scope`, editable)
+- **Scope of work** (one text box on the Quote tab, above Notes / exclusions). It starts as the catalog `scope` of each line item (each paragraph once) and can be edited freely; *Use automatic text* restores it. On both printouts it is printed in 12pt bold, the same as the Total line.
+- **Section headings** SCOPE OF WORK, CONSTRUCTION TYPE and NOTES / EXCLUSIONS are underlined on both printouts.
 - **Construction type:** ☐ New Const. ☐ Remodel
 - **Notes / exclusions** (e.g. "No Spec")
 - **Grand total**
