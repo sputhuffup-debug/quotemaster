@@ -881,6 +881,28 @@
       ok(/doc-logo/.test(doc) && /1020 Winding Creek/.test(doc), 'beside layout prints the text block');
       ok(/CA Lic# 390876/.test(doc) && !/Lic\. CA Lic#/.test(doc), 'license not double-prefixed');
     });
+    test('scope of work: one quote-level text', function () {
+      var s = freshSettings();
+      s.catalog.push(Pricing.normalizeCatalogItem({ subject: 'Trim', unit: 'lf', scope: 'FURNISH AND INSTALL PVC TRIM' }));
+      s.subjectMap = { 'Trim A': 'Trim' };
+      var q = newQ(s);
+      var rows = Parse.parseCsvText("Subject,Page Index,Measurement,Install Height,Waste Sq FT.\nFRP-8',1,100,8',800\nTrim A,1,50,LF,\n").rows;
+      var pr = Pricing.price(q, rows);
+      eq(Quote.scopeTextAuto(pr), DEFAULTS.catalog[0].scope + '\n\nFURNISH AND INSTALL PVC TRIM', 'built from the lines, each once');
+      var doc = Quote.render(q, pr, s, 'proposal');
+      eq((doc.match(/<p>FURNISH AND INSTALL/g) || []).length, 2, 'two paragraphs printed');
+      ok(/<div class="doc-label doc-section">Scope of work<\/div>/.test(doc), 'Scope of work heading underlined');
+      ok(/doc-section">Construction type/.test(doc) && /doc-section">Notes \/ exclusions/.test(doc), 'Construction type and Notes headings underlined');
+      q.scopeText = 'FURNISH AND INSTALL FRP IN KITCHEN ONLY.\nOWNER TO REMOVE EXISTING TILE.';
+      doc = Quote.render(q, Pricing.price(q, rows), s, 'internal');
+      ok(/<p>FURNISH AND INSTALL FRP IN KITCHEN ONLY\.<br>OWNER TO REMOVE EXISTING TILE\.<\/p>/.test(doc), 'typed scope printed (internal too)');
+      ok(!/PVC TRIM<\/p>/.test(doc), 'automatic text replaced');
+      q.scopeText = '';
+      ok(!/class="doc-scope"/.test(Quote.render(q, Pricing.price(q, rows), s, 'proposal')), 'cleared on purpose -> no scope section');
+      delete q.scopeText;
+      q.lineOverrides[Pricing.price(q, rows).lines[0].key] = { scope: 'OLD PER-LINE SCOPE' };   // quotes saved before this change
+      ok(/OLD PER-LINE SCOPE/.test(Quote.scopeText(q, Pricing.price(q, rows))), 'older per-line scope edits still used');
+    });
     test('settings upgrade to the letterhead', function () {
       var blank = RqbStorage.normalizeSettings({ version: 2, company: { name: '', address: '', phone: '', email: '', license: '', logoDataUrl: '' } });
       eq(blank.company.logoDataUrl, 'img/universal-plastics-logo.png', 'blank company -> letterhead');

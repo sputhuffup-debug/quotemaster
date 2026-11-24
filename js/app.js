@@ -508,7 +508,6 @@
     var lines = state.priced.lines.filter(function (l) { return !l.excluded; });
     var lineCards = lines.map(function (l, i) {
       var ov = q.lineOverrides[l.key] || {};
-      var item = P.findCatalogItem(q.rates.catalog, l.catalogSubject) || {};
       return '<div class="card" style="background:#fafbfc">' +
         '<div class="card-head"><strong>' + esc(l.scopeLabel || l.catalogSubject) + '</strong><span class="hint">' + esc(l.catalogSubject) + ' · ' + U.formatMoney(l.total) + '</span></div>' +
         field('Scope of work', textInput('qd-label-' + i, l.scopeLabelOverridden ? l.scopeLabel : '', ' data-line="' + esc(l.key) + '" data-ov="scopeLabel" placeholder="' + esc(l.scopeLabelAuto) + '"' +
@@ -516,8 +515,6 @@
           '<span class="hint">' + (l.scopeLabelOverridden ? 'Typed by hand. Clear it to go back to the automatic label.' : 'Automatic from the Pricing tab (count, type, height, note). Type here to replace it.') + '</span>') +
         field('Material description', textInput('qd-desc-' + i, l.description, ' data-line="' + esc(l.key) + '" data-ov="description"') +
           (ov.description !== undefined ? '<button type="button" class="link small" data-act="reset-ov" data-line="' + esc(l.key) + '" data-ov="description">use catalog text</button>' : '')) +
-        field('Scope paragraph', '<textarea rows="3" id="qd-scope-' + i + '" data-line="' + esc(l.key) + '" data-ov="scope">' + esc(l.scope) + '</textarea>' +
-          (ov.scope !== undefined && ov.scope !== item.scope ? '<button type="button" class="link small" data-act="reset-ov" data-line="' + esc(l.key) + '" data-ov="scope">use catalog text</button>' : '')) +
         '</div>';
     }).join('');
 
@@ -541,6 +538,10 @@
             return '<label class="check"><input type="radio" name="ctype" id="q-ct-' + (v || 'none') + '" data-q="constructionType" value="' + v + '"' + (q.constructionType === v ? ' checked' : '') + '> ' + lbl + '</label>';
           }).join('') +
         '</div></div>' +
+        field('Scope of work', '<textarea rows="4" id="q-scope" data-q="scopeText">' + esc(Q.scopeText(q, state.priced)) + '</textarea>' +
+          '<span class="hint">' + (typeof q.scopeText === 'string'
+            ? 'Edited for this quote. <button type="button" class="link small" data-act="reset-scope">Use automatic text</button> (built from the line items\' catalog scope).'
+            : 'Built from the line items\' catalog scope. Edit freely; it prints above Construction type and Notes on both printouts.') + '</span>') +
         field('Notes / exclusions (one per line)', '<textarea rows="4" id="q-notes" data-q="notes">' + esc(q.notes) + '</textarea>') +
       '</div>' +
       '<div class="card">' +
@@ -1037,6 +1038,10 @@
         changed();
         break;
       }
+      case 'reset-scope':
+        delete q.scopeText;
+        changed();
+        break;
       case 'reset-ov': {
         var ov = q.lineOverrides[b.dataset.line];
         if (ov) { delete ov[b.dataset.ov]; if (!Object.keys(ov).length) delete q.lineOverrides[b.dataset.line]; }
