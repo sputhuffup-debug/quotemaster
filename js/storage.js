@@ -57,6 +57,10 @@
       }
     }
     delete out.quote.nextNumber;
+    // v5 -> v6: the letterhead left the repo; it now lives at img/letterhead.png on each computer.
+    if (fromVersion < 6 && out.company && out.company.logoDataUrl === 'img/universal-plastics-logo.png') {
+      out.company.logoDataUrl = 'img/letterhead.png';
+    }
     out.version = global.DEFAULTS.version;
     out.catalog = (out.catalog || []).map(global.Pricing.normalizeCatalogItem);
     if (!Array.isArray(out.terms.notes)) out.terms.notes = String(out.terms.notes || '').split(/\r?\n/).filter(Boolean);

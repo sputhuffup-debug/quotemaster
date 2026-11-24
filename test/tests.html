@@ -1002,7 +1002,11 @@
       var q = newQ(s);
       var pr = Pricing.price(q, fixture().rows);
       var doc = Quote.render(q, pr, s, 'proposal');
-      ok(/<img class="doc-banner" src="img\/universal-plastics-logo\.png"/.test(doc), 'letterhead image in the header');
+      ok(/<img class="doc-banner" src="img\/letterhead\.png"/.test(doc), 'letterhead image in the header (img/letterhead.png)');
+      ok(/onerror="this\.onerror=null;this\.src='img\/letterhead-placeholder\.png'"/.test(doc), 'falls back to the placeholder when the file is missing');
+      s.company.logoDataUrl = 'data:image/png;base64,AAA';
+      ok(!/onerror/.test(Quote.render(q, pr, s, 'proposal')), 'uploaded logo: no fallback needed');
+      s.company.logoDataUrl = 'img/letterhead.png';
       ok(!/1020 Winding Creek/.test(doc), 'address not printed twice (it is in the image)');
       ok(/Universal Plastics, Inc\.<\/div>/.test(doc), 'company name on the signature line');
       ok(/doc-banner/.test(Quote.render(q, pr, s, 'internal')), 'internal take-off too');
@@ -1053,7 +1057,9 @@
     });
     test('settings upgrade to the letterhead', function () {
       var blank = RqbStorage.normalizeSettings({ version: 2, company: { name: '', address: '', phone: '', email: '', license: '', logoDataUrl: '' } });
-      eq(blank.company.logoDataUrl, 'img/universal-plastics-logo.png', 'blank company -> letterhead');
+      eq(blank.company.logoDataUrl, 'img/letterhead.png', 'blank company -> letterhead');
+      eq(RqbStorage.normalizeSettings({ version: 5, company: { name: 'Universal Plastics, Inc.', logoDataUrl: 'img/universal-plastics-logo.png', logoLayout: 'banner' } }).company.logoDataUrl,
+        'img/letterhead.png', 'old repo logo path -> img/letterhead.png');
       eq(blank.company.name, 'Universal Plastics, Inc.', 'and name');
       var mine = RqbStorage.normalizeSettings({ version: 2, company: { name: 'Someone Else', logoDataUrl: 'data:image/png;base64,AAA' } });
       eq(mine.company.name, 'Someone Else', 'entered company kept');
