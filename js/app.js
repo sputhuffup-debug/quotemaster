@@ -869,7 +869,9 @@
           field('Quote valid for (days)', numInput('s-valid', s.terms.validDays, ' data-s="terms.validDays"')) +
           field('Sales tax on material (%)', numInput('s-tax', s.terms.taxPct, ' data-s="terms.taxPct"')) +
           field('Quote # prefix', textInput('s-prefix', s.quote.prefix, ' data-s="quote.prefix"')) +
-          field('Next quote #', numInput('s-next', s.quote.nextNumber, ' data-s="quote.nextNumber"')) +
+          field('Next quote # (' + (s.quote.includeYear !== false ? new Date().getFullYear() : 'all years') + ')',
+            numInput('s-next', Q.nextNumberFor(s, U.toISODate(new Date())), ' data-s="quote.counters.' + Q.counterKey(s, U.toISODate(new Date())) + '"')) +
+          field('First quote # each year', numInput('s-start', s.quote.startNumber, ' data-s="quote.startNumber"')) +
           '<label class="field"><span>Year in quote #</span><span class="check" style="padding:6px 0"><input type="checkbox" id="s-qyear" data-s="quote.includeYear"' +
             (s.quote.includeYear !== false ? ' checked' : '') + '> Include year</span></label>' +
           field('Next quote will be', '<input type="text" readonly tabindex="-1" id="s-qpreview" value="' + esc(Q.formatQuoteNumber(s, U.toISODate(new Date()))) + '">') +
@@ -974,11 +976,11 @@
 
   function saveQuote() {
     var q = state.quote;
-    var before = { number: q.number, committed: q.numberCommitted, next: state.settings.quote.nextNumber };
+    var before = { number: q.number, committed: q.numberCommitted, counters: JSON.parse(JSON.stringify(state.settings.quote.counters || {})) };
     Q.commitNumber(q, state.settings);
     S.saveJsonFile(Q.toFile(q), Q.fileName(q)).then(function (saved) {
       if (!saved) {
-        q.number = before.number; q.numberCommitted = before.committed; state.settings.quote.nextNumber = before.next;
+        q.number = before.number; q.numberCommitted = before.committed; state.settings.quote.counters = before.counters;
         return;
       }
       S.saveSettings(state.settings);
@@ -987,7 +989,7 @@
       render();
       toast('Saved ' + q.number);
     }).catch(function (e) {
-      q.number = before.number; q.numberCommitted = before.committed; state.settings.quote.nextNumber = before.next;
+      q.number = before.number; q.numberCommitted = before.committed; state.settings.quote.counters = before.counters;
       toast('Could not save: ' + e.message, true);
     });
   }
@@ -1102,7 +1104,8 @@
       else if (t.classList.contains('num')) sv = parseNumOrRaw(t.value);
       else sv = t.value;
       setPath(state.settings, t.dataset.s, sv);
-      settingsChanged();
+      // Switching the year on/off changes which counter "Next quote #" edits: redraw Settings.
+      settingsChanged(t.dataset.s === 'quote.includeYear' ? 'full' : undefined);
       var qp = $('#s-qpreview');
       if (qp) qp.value = Q.formatQuoteNumber(state.settings, U.toISODate(new Date()));
       var dr = $('#s-dayrate');

@@ -244,7 +244,7 @@ window.DEFAULTS = {
   company: { name: "", address: "", phone: "", email: "", license: "", logoDataUrl: "" },
   terms: { validDays: 30, notes: ["No Spec"], taxPct: 0 },
   proposal: { showSplit: false, lumpSum: false, showUnitQty: true },
-  quote: { nextNumber: 1001, prefix: "Q-", includeYear: true }   // -> Q-2026-1001
+  quote: { prefix: "Q-", includeYear: true, startNumber: 1001, counters: {} }   // -> Q-26-1001, a new count each year
 };
 ```
 
@@ -367,8 +367,10 @@ On the GC proposal the total becomes **Base bid**, followed by an underlined **A
 - The quote in progress is autosaved to `rqb.draft.v1`, so it survives a closed tab. That autosave is not a backup; use **Save quote**.
 - **Export / Import Settings** buttons save and load a `.json` file. That file is the real backup, because browser storage can be cleared.
 - **Save Quote / Open Quote** handles a `.json` file holding the quote, its source CSV rows, and the rates used, so an old quote re-opens with its original numbers. Use `showSaveFilePicker` when available; otherwise fall back to a Blob download.
-- **Quote numbers** are `prefix-year-number`, e.g. **Q-2026-1001**. The year comes from the quote's date. *Settings → Terms & numbering* has the prefix, next number and an *Include year* switch (off gives Q-1001), plus a preview of the next number.
-  - A new quote shows its provisional number marked "(draft)". It follows the quote date and Settings until the quote is saved for the first time, which takes the number and increments `nextNumber`.
+- **Quote numbers** are `prefix-YY-number`. **Q-26-1001** is the first quote of 2026, and each new year starts again at 1001 (Q-27-1001).
+  - The year is the last two digits of the quote's date. A quote dated December 2026 but saved in January still gets the next 2026 number, because each year keeps its own counter (`quote.counters`).
+  - *Settings → Terms & numbering* has the prefix, **Next quote #** for the current year, **First quote # each year** (1001), an *Include year* switch (off gives one running counter, e.g. Q-1001) and a preview of the next number.
+  - A new quote shows its provisional number marked "(draft)". It follows the quote date and Settings until the first save, which takes the number and moves that year's counter on.
   - Later saves keep the number. Typing a number by hand fixes it. Quotes saved earlier keep their numbers.
 
 ---
