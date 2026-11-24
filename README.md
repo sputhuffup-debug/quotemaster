@@ -86,6 +86,9 @@ revu-quote-builder/
 ├── img/
 │   └── universal-plastics-logo.png  # default letterhead on quotes
 ├── docs/
+│   ├── json-format.md      # saved quote / settings JSON reference (for other programs)
+│   ├── quote-file.schema.json
+│   ├── examples/           # quote-example.json, settings-example.json
 │   └── screenshots/        # README images
 ├── test/
 │   ├── tests.html          # open in browser; runs plain-JS assertions
@@ -366,6 +369,7 @@ On the GC proposal the total becomes **Base bid**, followed by an underlined **A
 - Settings live in `localStorage` under the key `rqb.settings.v1`, seeded from `DEFAULTS` on first run.
 - The quote in progress is autosaved to `rqb.draft.v1`, so it survives a closed tab. That autosave is not a backup; use **Save quote**.
 - **Export / Import Settings** buttons save and load a `.json` file. That file is the real backup, because browser storage can be cleared.
+- **File formats for other programs:** [`docs/json-format.md`](docs/json-format.md) documents the saved quote and settings files. Saved quotes include a read-only `summary` block with the calculated lines, totals and alternates. There is also a JSON Schema ([`docs/quote-file.schema.json`](docs/quote-file.schema.json)) and real examples in [`docs/examples/`](docs/examples/).
 - **Save Quote / Open Quote** handles a `.json` file holding the quote, its source CSV rows, and the rates used, so an old quote re-opens with its original numbers. Use `showSaveFilePicker` when available; otherwise fall back to a Blob download.
 - **Quote numbers** are `prefix-YY-number`. **Q-26-1001** is the first quote of 2026, and each new year starts again at 1001 (Q-27-1001).
   - The year is the last two digits of the quote's date. A quote dated December 2026 but saved in January still gets the next 2026 number, because each year keeps its own counter (`quote.counters`).
