@@ -37,9 +37,17 @@
     };
   }
 
+  /** "Q-2026-1001": prefix + year of the quote date (if includeYear) + next running number. */
+  function formatQuoteNumber(settings, isoDate, n) {
+    var qs = settings.quote || {};
+    var d = U.parseISODate(isoDate) || new Date();
+    var num = n !== undefined ? n : qs.nextNumber;
+    return (qs.prefix || '') + (qs.includeYear !== false ? d.getFullYear() + '-' : '') + num;
+  }
+
   function newQuote(settings) {
     return {
-      number: (settings.quote.prefix || '') + settings.quote.nextNumber,
+      number: formatQuoteNumber(settings, U.toISODate(new Date())),
       numberCommitted: false,
       date: U.toISODate(new Date()),
       gc: { name: '', attention: '' },
@@ -97,7 +105,7 @@
    */
   function commitNumber(quote, settings) {
     if (quote.numberCommitted) return false;
-    quote.number = (settings.quote.prefix || '') + settings.quote.nextNumber;
+    quote.number = formatQuoteNumber(settings, quote.date);
     quote.numberCommitted = true;
     settings.quote.nextNumber = (parseInt(settings.quote.nextNumber, 10) || 0) + 1;
     return true;
@@ -494,6 +502,7 @@
     normalizeQuote: normalizeQuote,
     ratesFromSettings: ratesFromSettings,
     commitNumber: commitNumber,
+    formatQuoteNumber: formatQuoteNumber,
     toFile: toFile,
     fromFile: fromFile,
     fileName: fileName,

@@ -616,7 +616,7 @@
       eq((detail.match(/FRP-CLASS C MARLITE S100 S2S WHITE SMOOTH PVC TRIM/g) || []).length, 26, 'material description on every one of the 26 rows');
       var iFrp = detail.indexOf('104-FRP-10&#39; (2)'), iMar = detail.indexOf('126-MARLITE-4&#39; (15)');
       ok(iFrp > 0 && iFrp < iMar && iMar < detail.indexOf('SALES'), 'subtotal rows in CSV order');
-      ok(/Take-off detail<\/h2>/.test(detail) && /Q-1001/.test(detail), 'own heading with quote #');
+      ok(/Take-off detail<\/h2>/.test(detail) && /Q-\d{4}-1001/.test(detail), 'own heading with quote #');
       ok(!/doc-takeoff/.test(Quote.render(q, pr, s, 'proposal')), 'not on the GC proposal');
     });
 
@@ -894,14 +894,20 @@
     test('numbering increments on first save only', function () {
       var s = freshSettings();
       var q = newQ(s);
-      eq(q.number, 'Q-1001', 'provisional number');
+      var yr = new Date().getFullYear();
+      eq(q.number, 'Q-' + yr + '-1001', 'provisional number Q-<year>-1001');
       ok(Quote.commitNumber(q, s), 'first commit changes settings');
-      eq(q.number, 'Q-1001', 'number assigned');
+      eq(q.number, 'Q-' + yr + '-1001', 'number assigned');
       eq(s.quote.nextNumber, 1002, 'next number bumped');
       ok(!Quote.commitNumber(q, s), 'second save keeps number');
       eq(s.quote.nextNumber, 1002, 'not bumped again');
       var q2 = newQ(s);
-      eq(q2.number, 'Q-1002', 'next quote gets 1002');
+      eq(q2.number, 'Q-' + yr + '-1002', 'next quote gets 1002');
+      q2.date = '2027-01-05';
+      Quote.commitNumber(q2, s);
+      eq(q2.number, 'Q-2027-1002', 'year comes from the quote date');
+      eq(Quote.formatQuoteNumber({ quote: { prefix: 'Q-', includeYear: false, nextNumber: 1003 } }, '2026-05-01'), 'Q-1003', 'Include year off -> Q-1003');
+      eq(RqbStorage.normalizeSettings({ quote: { nextNumber: 1050, prefix: 'Q-' } }).quote.includeYear, true, 'saved settings pick up the year format');
     });
     test('save file round-trip keeps original rates', function () {
       var s = freshSettings();

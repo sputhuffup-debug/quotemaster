@@ -72,5 +72,6 @@ window.DEFAULTS = {
   // Internal take-off: per-line calculation rows (takeoff → qty, material ×, labor ÷) are off by default;
   // the labor cost/day summary under the line items covers them.
   internal: { showCalc: false },
-  quote: { nextNumber: 1001, prefix: "Q-" }
+  // Quote numbers: prefix + year of the quote date + running number, e.g. Q-2026-1001 (includeYear: false -> Q-1001)
+  quote: { nextNumber: 1001, prefix: "Q-", includeYear: true }
 };

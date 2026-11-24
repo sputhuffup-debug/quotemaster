@@ -108,6 +108,10 @@
   function settingsChanged(mode) {
     S.saveSettings(state.settings);
     syncPristineQuote();
+    if (!state.quote.numberCommitted) {
+      state.quote.number = Q.formatQuoteNumber(state.settings, state.quote.date);
+      saveDraft();
+    }
     if (mode === 'full') render();
     else renderLight();
   }
@@ -218,6 +222,8 @@
     if (ah) ah.innerHTML = areaHint();
     var adh = $('#q-addm-hint');
     if (adh) adh.innerHTML = addendaHint(state.quote);
+    var qn = $('#q-number');
+    if (qn && doc.activeElement !== qn && qn.value !== state.quote.number) qn.value = state.quote.number;
     var prev = $('#preview');
     if (prev) prev.innerHTML = Q.render(state.quote, state.priced, state.settings, state.previewMode);
     var tot = $('#totals-bar');
@@ -864,6 +870,9 @@
           field('Sales tax on material (%)', numInput('s-tax', s.terms.taxPct, ' data-s="terms.taxPct"')) +
           field('Quote # prefix', textInput('s-prefix', s.quote.prefix, ' data-s="quote.prefix"')) +
           field('Next quote #', numInput('s-next', s.quote.nextNumber, ' data-s="quote.nextNumber"')) +
+          '<label class="field"><span>Year in quote #</span><span class="check" style="padding:6px 0"><input type="checkbox" id="s-qyear" data-s="quote.includeYear"' +
+            (s.quote.includeYear !== false ? ' checked' : '') + '> Include year</span></label>' +
+          field('Next quote will be', '<input type="text" readonly tabindex="-1" id="s-qpreview" value="' + esc(Q.formatQuoteNumber(s, U.toISODate(new Date()))) + '">') +
         '</div>' +
         '<div style="margin-top:10px">' + field('Default notes / exclusions (one per line)', '<textarea rows="4" id="s-notes" data-s="terms.notes" data-lines="1">' + esc((s.terms.notes || []).join('\n')) + '</textarea>') + '</div>' +
         '<div class="row" style="margin-top:10px">' +
@@ -1048,6 +1057,8 @@
       if (t.type === 'radio') { if (!t.checked) return; v = t.value; }
       setPath(state.quote, path, v);
       if (path === 'number') state.quote.numberCommitted = true;
+      // An unsaved quote's provisional number follows its date (Q-2026-… vs Q-2027-…).
+      if (path === 'date' && !state.quote.numberCommitted) state.quote.number = Q.formatQuoteNumber(state.settings, state.quote.date);
       changed(full ? 'full' : 'light');
       return;
     }
@@ -1092,6 +1103,8 @@
       else sv = t.value;
       setPath(state.settings, t.dataset.s, sv);
       settingsChanged();
+      var qp = $('#s-qpreview');
+      if (qp) qp.value = Q.formatQuoteNumber(state.settings, U.toISODate(new Date()));
       var dr = $('#s-dayrate');
       if (dr) dr.value = dayRatesText(state.settings.labor);
       return;
@@ -1383,6 +1396,8 @@
       } catch (e) { state.quote = null; }
     }
     if (!state.quote) state.quote = Q.newQuote(state.settings);
+    // An unsaved quote takes the current next number (another quote may have been saved since).
+    if (!state.quote.numberCommitted) state.quote.number = Q.formatQuoteNumber(state.settings, state.quote.date);
     recompute();
 
     $('#tabs').addEventListener('click', function (e) {

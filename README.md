@@ -244,7 +244,7 @@ window.DEFAULTS = {
   company: { name: "", address: "", phone: "", email: "", license: "", logoDataUrl: "" },
   terms: { validDays: 30, notes: ["No Spec"], taxPct: 0 },
   proposal: { showSplit: false, lumpSum: false, showUnitQty: true },
-  quote: { nextNumber: 1001, prefix: "Q-" }
+  quote: { nextNumber: 1001, prefix: "Q-", includeYear: true }   // -> Q-2026-1001
 };
 ```
 
@@ -367,7 +367,9 @@ On the GC proposal the total becomes **Base bid**, followed by an underlined **A
 - The quote in progress is autosaved to `rqb.draft.v1`, so it survives a closed tab. That autosave is not a backup; use **Save quote**.
 - **Export / Import Settings** buttons save and load a `.json` file. That file is the real backup, because browser storage can be cleared.
 - **Save Quote / Open Quote** handles a `.json` file holding the quote, its source CSV rows, and the rates used, so an old quote re-opens with its original numbers. Use `showSaveFilePicker` when available; otherwise fall back to a Blob download.
-- A new quote shows the next number marked "(draft)". The number is taken, and `nextNumber` incremented, on the quote's **first** save; later saves keep it. Typing a number by hand fixes it.
+- **Quote numbers** are `prefix-year-number`, e.g. **Q-2026-1001**. The year comes from the quote's date. *Settings → Terms & numbering* has the prefix, next number and an *Include year* switch (off gives Q-1001), plus a preview of the next number.
+  - A new quote shows its provisional number marked "(draft)". It follows the quote date and Settings until the quote is saved for the first time, which takes the number and increments `nextNumber`.
+  - Later saves keep the number. Typing a number by hand fixes it. Quotes saved earlier keep their numbers.
 
 ---
 
