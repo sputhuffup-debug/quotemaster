@@ -61,6 +61,16 @@
     if (fromVersion < 6 && out.company && out.company.logoDataUrl === 'img/universal-plastics-logo.png') {
       out.company.logoDataUrl = 'img/letterhead.png';
     }
+    // v6 -> v7: remember the highest number saved per year. Older settings only know the counter,
+    // so assume everything below it was used.
+    if (fromVersion < 7 && out.quote) {
+      out.quote.highest = out.quote.highest || {};
+      var st = parseInt(out.quote.startNumber, 10) || 1001;
+      Object.keys(out.quote.counters || {}).forEach(function (k) {
+        var c = parseInt(out.quote.counters[k], 10);
+        if (isFinite(c) && c > st && out.quote.highest[k] === undefined) out.quote.highest[k] = c - 1;
+      });
+    }
     out.version = global.DEFAULTS.version;
     out.catalog = (out.catalog || []).map(global.Pricing.normalizeCatalogItem);
     if (!Array.isArray(out.terms.notes)) out.terms.notes = String(out.terms.notes || '').split(/\r?\n/).filter(Boolean);

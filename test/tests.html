@@ -913,6 +913,32 @@
       var flat = { quote: { prefix: 'Q-', includeYear: false, startNumber: 1001, counters: { all: 1003 } } };
       eq(Quote.formatQuoteNumber(flat, '2026-05-01'), 'Q-1003', 'Include year off -> one running counter, Q-1003');
     });
+    test('setting / stepping the quote number', function () {
+      var s = freshSettings();
+      var q = Quote.newQuote(s); q.date = '2026-11-24';
+      eq(Quote.splitNumber('Q-26-1047').head + '|' + Quote.splitNumber('Q-26-1047').n, 'Q-26-|1047', 'split prefix-year and number');
+      eq(Quote.splitNumber('CUSTOM'), null, 'custom text has no number part');
+      Quote.setNumberPart(q, s, 1050);
+      eq(q.number, 'Q-26-1050', 'unsaved quote shows the number set');
+      eq(Quote.nextNumberFor(s, '2026-06-01'), 1050, '... and that is now the 2026 counter');
+      Quote.commitNumber(q, s);
+      eq(q.number + ' / next ' + Quote.nextNumberFor(s, '2026-06-01'), 'Q-26-1050 / next 1051', 'save takes it and counts on');
+      Quote.setNumberPart(q, s, 1060);
+      eq(q.number + ' / next ' + Quote.nextNumberFor(s, '2026-06-01'), 'Q-26-1060 / next 1061', 'renumbering a saved quote moves the counter past it');
+      Quote.setNumberPart(q, s, 1055);
+      eq(q.number + ' / next ' + Quote.nextNumberFor(s, '2026-06-01'), 'Q-26-1055 / next 1061', 'renumbering lower leaves the counter alone');
+      var d = Quote.newQuote(s); d.date = '2026-12-01';
+      Quote.setNumberPart(d, s, 1049);
+      ok(/already been saved/.test(Quote.numberWarning(s, d.date, 1049)), 'stepping back below a saved number warns');
+      eq(Quote.numberWarning(s, d.date, 1061), '', 'a fresh number does not');
+      Quote.setNumberPart(d, s, 0);
+      eq(d.number, 'Q-26-1', 'never below 1');
+      var up = RqbStorage.normalizeSettings({ version: 6, quote: { prefix: 'Q-', includeYear: true, startNumber: 1001, counters: { '2026': 1048 } } });
+      eq(Quote.highestUsed(up, '2026'), 1047, 'upgrading older settings: everything below the counter counts as used');
+      var t2 = freshSettings(); var e = Quote.newQuote(t2); e.date = '2026-03-01';
+      Quote.setNumberPart(e, t2, 1050); Quote.setNumberPart(e, t2, 1049);
+      eq(Quote.numberWarning(t2, e.date, 1049), '', 'stepping an unsaved draft up and down: no false warning');
+    });
     test('saved settings move to per-year counters', function () {
       var yr = String(new Date().getFullYear());
       var up = RqbStorage.normalizeSettings({ version: 4, quote: { nextNumber: 1050, prefix: 'Q-', includeYear: true } });

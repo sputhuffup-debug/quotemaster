@@ -378,6 +378,10 @@ On the GC proposal the total becomes **Base bid**, followed by an underlined **A
 - **Quote numbers** are `prefix-YY-number`. **Q-26-1001** is the first quote of 2026, and each new year starts again at 1001 (Q-27-1001).
   - The year is the last two digits of the quote's date. A quote dated December 2026 but saved in January still gets the next 2026 number, because each year keeps its own counter (`quote.counters`).
   - *Settings → Terms & numbering* has the prefix, **Next quote #** for the current year, **First quote # each year** (1001), an *Include year* switch (off gives one running counter, e.g. Q-1001) and a preview of the next number.
+  - **Setting the number:** the Quote tab shows `Q-26-` plus a number box with **−** / **+** buttons (or type a number). Settings → *Next quote #* has the same buttons.
+    - On an unsaved quote, changing it sets that year's next number. Example: set 1050, save, and the next quote is 1051.
+    - On a saved quote it renumbers that quote only, and the counter moves past the new number if needed.
+    - The highest number saved each year (`quote.highest`) is remembered, and going back to a number at or below it shows a warning, but is still allowed.
   - A new quote shows its provisional number marked "(draft)". It follows the quote date and Settings until the first save, which takes the number and moves that year's counter on.
   - Later saves keep the number. Typing a number by hand fixes it. Quotes saved earlier keep their numbers.
 

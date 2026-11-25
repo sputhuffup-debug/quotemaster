@@ -176,6 +176,30 @@
     global.scrollTo(0, scrollY);
   }
 
+  /** Quote # field: "Q-26-" + number box with − / + (or a plain text box for a custom number). */
+  function quoteNumberInput(q) {
+    var parts = Q.splitNumber(q.number);
+    if (!parts) return textInput('q-number', q.number, ' data-q="number"');
+    return '<div class="qnum"><span class="qnum-head" id="q-num-head">' + esc(parts.head) + '</span>' +
+      numInput('q-numpart', parts.n, ' data-qnum="1" style="width:84px"') +
+      '<button type="button" class="small" data-act="qnum-step" data-d="-1" title="One lower">−</button>' +
+      '<button type="button" class="small" data-act="qnum-step" data-d="1" title="One higher">+</button></div>';
+  }
+  function quoteNumberHint(q) {
+    if (q.numberCommitted) return 'Saved number. Changing it renumbers this quote only.';
+    var parts = Q.splitNumber(q.number);
+    var warn = parts ? Q.numberWarning(state.settings, q.date, parts.n) : '';
+    return 'Unsaved: taken when first saved. Changing it sets the next number for ' +
+      (state.settings.quote.includeYear !== false ? (U.parseISODate(q.date) || new Date()).getFullYear() : 'all years') + '.' +
+      (warn ? ' <strong class="warn-text">' + esc(warn) + '</strong>' : '');
+  }
+  function setQuoteNumberPart(n) {
+    if (!isFinite(n) || n < 1) return false;
+    Q.setNumberPart(state.quote, state.settings, n);
+    S.saveSettings(state.settings);
+    return true;
+  }
+
   function addendaHint(q) {
     var t = Q.addendaText(q);
     return t ? 'Prints as: <strong>ADDENDA REVIEWED: ' + esc(t) + '</strong>'
@@ -222,6 +246,12 @@
     if (ah) ah.innerHTML = areaHint();
     var adh = $('#q-addm-hint');
     if (adh) adh.innerHTML = addendaHint(state.quote);
+    var nh = $('#q-num-hint');
+    if (nh) nh.innerHTML = quoteNumberHint(state.quote);
+    var np = $('#q-numpart'), parts = Q.splitNumber(state.quote.number);
+    if (np && parts && doc.activeElement !== np && String(parts.n) !== np.value) np.value = parts.n;
+    var nhd = $('#q-num-head');
+    if (nhd && parts) nhd.textContent = parts.head;
     var qn = $('#q-number');
     if (qn && doc.activeElement !== qn && qn.value !== state.quote.number) qn.value = state.quote.number;
     var prev = $('#preview');
@@ -637,7 +667,7 @@
       '<div class="card">' +
         '<h3>Quote details</h3>' +
         '<div class="grid">' +
-          field('Quote #', textInput('q-number', q.number, ' data-q="number"') + '<span class="hint">' + (q.numberCommitted ? 'Assigned' : 'Assigned when first saved') + '</span>') +
+          field('Quote #', quoteNumberInput(q) + '<span class="hint" id="q-num-hint">' + quoteNumberHint(q) + '</span>') +
           field('Date', '<input type="date" id="q-date" data-q="date"' + attr('value', q.date) + '>') +
           field('Valid for (days)', numInput('q-valid', q.validDays, ' data-q="validDays"')) +
         '</div>' +
@@ -871,7 +901,10 @@
           field('Sales tax on material (%)', numInput('s-tax', s.terms.taxPct, ' data-s="terms.taxPct"')) +
           field('Quote # prefix', textInput('s-prefix', s.quote.prefix, ' data-s="quote.prefix"')) +
           field('Next quote # (' + (s.quote.includeYear !== false ? new Date().getFullYear() : 'all years') + ')',
-            numInput('s-next', Q.nextNumberFor(s, U.toISODate(new Date())), ' data-s="quote.counters.' + Q.counterKey(s, U.toISODate(new Date())) + '"')) +
+            '<div class="qnum">' + numInput('s-next', Q.nextNumberFor(s, U.toISODate(new Date())), ' data-s="quote.counters.' + Q.counterKey(s, U.toISODate(new Date())) + '" style="width:90px"') +
+            '<button type="button" class="small" data-act="next-step" data-d="-1" title="One lower">−</button>' +
+            '<button type="button" class="small" data-act="next-step" data-d="1" title="One higher">+</button></div>' +
+            '<span class="hint warn-text" id="s-next-warn">' + esc(Q.numberWarning(s, U.toISODate(new Date()), Q.nextNumberFor(s, U.toISODate(new Date())))) + '</span>') +
           field('First quote # each year', numInput('s-start', s.quote.startNumber, ' data-s="quote.startNumber"')) +
           '<label class="field"><span>Year in quote #</span><span class="check" style="padding:6px 0"><input type="checkbox" id="s-qyear" data-s="quote.includeYear"' +
             (s.quote.includeYear !== false ? ' checked' : '') + '> Include year</span></label>' +
@@ -1081,6 +1114,11 @@
       return;
     }
     if (t.dataset.map !== undefined) { setMapping(t.dataset.map, t.value); return; }
+    if (t.dataset.qnum !== undefined) {
+      var qn = parseInt(String(t.value).replace(/[^\d]/g, ''), 10);
+      if (setQuoteNumberPart(qn)) changed('light');
+      return;
+    }
     if (t.dataset.addm !== undefined) {
       var ad = (state.quote.addenda || []).filter(function (x) { return x.id === t.dataset.addm; })[0];
       if (!ad) return;
@@ -1104,11 +1142,14 @@
       else if (t.dataset.lines) sv = t.value.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(Boolean);
       else if (t.classList.contains('num')) sv = parseNumOrRaw(t.value);
       else sv = t.value;
+
       setPath(state.settings, t.dataset.s, sv);
       // Switching the year on/off changes which counter "Next quote #" edits: redraw Settings.
       settingsChanged(t.dataset.s === 'quote.includeYear' ? 'full' : undefined);
       var qp = $('#s-qpreview');
       if (qp) qp.value = Q.formatQuoteNumber(state.settings, U.toISODate(new Date()));
+      var sw = $('#s-next-warn');
+      if (sw) sw.textContent = Q.numberWarning(state.settings, U.toISODate(new Date()), Q.nextNumberFor(state.settings, U.toISODate(new Date())));
       var dr = $('#s-dayrate');
       if (dr) dr.value = dayRatesText(state.settings.labor);
       return;
@@ -1179,6 +1220,21 @@
         if (Object.keys(keep).length) q.lineOverrides[b.dataset.line] = keep;
         else delete q.lineOverrides[b.dataset.line];
         changed();
+        break;
+      }
+      case 'qnum-step': {
+        var cur = Q.splitNumber(q.number);
+        if (cur && setQuoteNumberPart(cur.n + (+b.dataset.d))) changed();
+        break;
+      }
+      case 'next-step': {
+        var today = U.toISODate(new Date());
+        var nx = Q.nextNumberFor(s, today) + (+b.dataset.d);
+        if (nx >= 1) {
+          s.quote.counters = s.quote.counters || {};
+          s.quote.counters[Q.counterKey(s, today)] = nx;
+          settingsChanged('full');
+        }
         break;
       }
       case 'addm-add': {
